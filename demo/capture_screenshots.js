@@ -12,6 +12,15 @@ let puppeteer;
 
 const BACKEND_URL = "http://127.0.0.1:8000/";
 const FRONTEND_URL = "http://127.0.0.1:3000/";
+const SCREENSHOT_FILES = [
+  "homepage.png",
+  "problem-input.png",
+  "document-upload.png",
+  "ai-reasoning-output.png",
+  "dashboard-results.png",
+  "agent-pipeline.png",
+  "confidence-score.png"
+];
 
 function startProcess(command, args, cwd) {
   return spawn(command, args, {
@@ -58,6 +67,12 @@ async function run() {
   }
   if (!fs.existsSync(SCREENSHOTS_DIR)) {
     fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
+  }
+  for (const fileName of SCREENSHOT_FILES) {
+    const fullPath = path.join(SCREENSHOTS_DIR, fileName);
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
+    }
   }
 
   const backendPython = path.join(BACKEND_DIR, "venv", "Scripts", "python.exe");
@@ -122,9 +137,23 @@ async function run() {
     await page.waitForFunction(
       () =>
         document.body.innerText.includes("Decision Report") &&
-        document.body.innerText.includes("Reasoning Timeline"),
+        document.body.innerText.includes("Decision Process Timeline"),
       { timeout: 120000 }
     );
+
+    const pipelineElement = await page.$('[data-testid="agent-pipeline"]');
+    if (pipelineElement) {
+      await pipelineElement.screenshot({ path: path.join(SCREENSHOTS_DIR, "agent-pipeline.png") });
+    } else {
+      await page.screenshot({ path: path.join(SCREENSHOTS_DIR, "agent-pipeline.png"), fullPage: true });
+    }
+
+    const confidenceElement = await page.$('[data-testid="confidence-score-card"]');
+    if (confidenceElement) {
+      await confidenceElement.screenshot({ path: path.join(SCREENSHOTS_DIR, "confidence-score.png") });
+    } else {
+      await page.screenshot({ path: path.join(SCREENSHOTS_DIR, "confidence-score.png"), fullPage: true });
+    }
 
     await page.screenshot({ path: path.join(SCREENSHOTS_DIR, "ai-reasoning-output.png"), fullPage: true });
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));

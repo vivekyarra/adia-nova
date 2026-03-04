@@ -46,6 +46,12 @@ ADIAOrchestrator
 - Demo-ready sample scenario buttons for fast judging flow.
 - Strict cost control with maximum 3 Nova calls per request.
 
+## What Makes ADIA Unique
+- Agent-based reasoning architecture
+- Multimodal document analysis
+- Structured decision intelligence output
+- Confidence scoring system
+
 ## Technology Stack
 - Backend: FastAPI, Python, boto3, python-dotenv.
 - Frontend: Next.js (Pages Router), React, Recharts.
@@ -112,3 +118,7 @@ See [demo/DEMO_SCRIPT.md](demo/DEMO_SCRIPT.md) for the 3-minute judging walkthro
 ![AI Reasoning Output](screenshots/ai-reasoning-output.png)
 
 ![Dashboard](screenshots/dashboard-results.png)
+
+![Agent Pipeline](screenshots/agent-pipeline.png)
+
+![Confidence Score](screenshots/confidence-score.png)

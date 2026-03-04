@@ -29,13 +29,22 @@ class AnalysisAgent:
             }
 
         context = parsed_inputs.text_context()
+        image_instruction = ""
+        if parsed_inputs.images:
+            image_instruction = (
+                "\nWhen images are provided, infer concise visual captions/observations "
+                "and include them in evidence_points."
+            )
         prompt = (
             "Review the evidence for the decision below and return JSON only.\n"
+            "If the uploaded content includes visual or document information, "
+            "extract insights and integrate them into the decision analysis.\n"
             "Required keys:\n"
             "- document_summary: <= 90 words\n"
             "- evidence_points: list of up to 5 concrete findings\n"
             "- risks: list of up to 4 risks from uploaded evidence\n"
             "- opportunities: list of up to 4 opportunities from uploaded evidence\n\n"
+            f"{image_instruction}\n\n"
             f"Problem: {problem}\n"
             f"Extracted text snippets:\n{context}"
         )
@@ -69,4 +78,3 @@ class AnalysisAgent:
             "opportunities": dedupe_keep_order(data.get("opportunities", fallback["opportunities"]), limit=4),
             "warnings": parsed_inputs.warnings,
         }
-

@@ -29,11 +29,13 @@ class ReasoningAgent:
             "Combine the inputs and return JSON only.\n"
             "Required keys:\n"
             "- viability_score: integer 0-100\n"
+            "- confidence_score: integer 0-100\n"
             "- reasoning_steps: list of 3 to 6 concise steps explaining your analysis sequence\n"
             "- risks: list of up to 6 concise risks\n"
             "- opportunities: list of up to 6 concise opportunities\n"
             "- recommended_strategy: max 70 words\n"
             "- summary: max 90 words\n\n"
+            "Return a confidence score from 0-100 representing how confident the system is in this recommendation.\n\n"
             f"Inputs: {json.dumps(payload, ensure_ascii=True)}"
         )
 
@@ -46,6 +48,7 @@ class ReasoningAgent:
 
         fallback = {
             "viability_score": 50,
+            "confidence_score": 60,
             "reasoning_steps": [
                 "Reviewed strategic context from the problem statement.",
                 "Synthesized uploaded evidence and extracted key signals.",
@@ -64,8 +67,15 @@ class ReasoningAgent:
             viability_score = float(fallback["viability_score"])
         viability_score = max(0.0, min(100.0, viability_score))
 
+        try:
+            confidence_score = float(data.get("confidence_score", fallback["confidence_score"]))
+        except (TypeError, ValueError):
+            confidence_score = float(fallback["confidence_score"])
+        confidence_score = max(0.0, min(100.0, confidence_score))
+
         return {
             "viability_score": viability_score,
+            "confidence_score": confidence_score,
             "reasoning_steps": dedupe_keep_order(
                 data.get("reasoning_steps", fallback["reasoning_steps"]),
                 limit=6,

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import AgentPipeline from "../components/AgentPipeline";
 import DecisionForm from "../components/DecisionForm";
 import ResultsDashboard from "../components/ResultsDashboard";
 
@@ -117,6 +118,10 @@ export default function HomePage() {
       ) : null}
 
       {error ? <p className="error-banner">{error}</p> : null}
+
+      {(loading || hasResult) ? (
+        <AgentPipeline loading={loading} currentStepIndex={thinkingIndex} hasResult={hasResult} />
+      ) : null}
 
       {hasResult ? (
         <ResultsDashboard result={result} problem={problem} />

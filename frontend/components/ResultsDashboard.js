@@ -19,15 +19,33 @@ function scoreColor(score) {
   return "#b3372e";
 }
 
+function riskLevelFromScores(viabilityScore, confidenceScore) {
+  if (viabilityScore >= 70 && confidenceScore >= 70) {
+    return "Low";
+  }
+  if (viabilityScore >= 45 && confidenceScore >= 55) {
+    return "Medium";
+  }
+  return "High";
+}
+
+function riskClassName(level) {
+  if (level === "Low") return "risk-low";
+  if (level === "Medium") return "risk-medium";
+  return "risk-high";
+}
+
 export default function ResultsDashboard({ result, problem }) {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => setIsClient(true), []);
 
   const viabilityScore = Number(result?.viability_score ?? 0);
+  const confidenceScore = Number(result?.confidence_score ?? 0);
   const risks = Array.isArray(result?.risks) ? result.risks : [];
   const opportunities = Array.isArray(result?.opportunities) ? result.opportunities : [];
   const reasoningSteps = Array.isArray(result?.reasoning_steps) ? result.reasoning_steps : [];
   const warnings = Array.isArray(result?.metadata?.warnings) ? result.metadata.warnings : [];
+  const riskLevel = riskLevelFromScores(viabilityScore, confidenceScore);
 
   const barData = useMemo(
     () => [
@@ -37,9 +55,13 @@ export default function ResultsDashboard({ result, problem }) {
     [risks.length, opportunities.length]
   );
 
-  const radialData = useMemo(
+  const viabilityRadialData = useMemo(
     () => [{ name: "Viability", value: viabilityScore, fill: scoreColor(viabilityScore) }],
     [viabilityScore]
+  );
+  const confidenceRadialData = useMemo(
+    () => [{ name: "Confidence", value: confidenceScore, fill: scoreColor(confidenceScore) }],
+    [confidenceScore]
   );
 
   return (
@@ -55,30 +77,63 @@ export default function ResultsDashboard({ result, problem }) {
       </article>
 
       <article className="card-panel card-span-6">
-        <h2>Viability Score</h2>
-        <p className="score-text" style={{ color: scoreColor(viabilityScore) }}>
-          {viabilityScore.toFixed(1)} / 100
-        </p>
-        {isClient ? (
-          <div className="chart-box">
-            <ResponsiveContainer width="100%" height={260}>
-              <RadialBarChart
-                cx="50%"
-                cy="50%"
-                innerRadius="55%"
-                outerRadius="95%"
-                barSize={20}
-                data={radialData}
-                startAngle={180}
-                endAngle={0}
-              >
-                <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-                <RadialBar dataKey="value" cornerRadius={10} />
-                <Tooltip />
-              </RadialBarChart>
-            </ResponsiveContainer>
+        <h2>Scoring Engine</h2>
+        <div className="score-grid">
+          <div className="score-card">
+            <p className="muted">Viability Score</p>
+            <p className="score-text" style={{ color: scoreColor(viabilityScore) }}>
+              {viabilityScore.toFixed(1)}%
+            </p>
+            {isClient ? (
+              <div className="chart-box score-chart">
+                <ResponsiveContainer width="100%" height={220}>
+                  <RadialBarChart
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="55%"
+                    outerRadius="95%"
+                    barSize={20}
+                    data={viabilityRadialData}
+                    startAngle={180}
+                    endAngle={0}
+                  >
+                    <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+                    <RadialBar dataKey="value" cornerRadius={10} />
+                    <Tooltip />
+                  </RadialBarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+
+          <div className="score-card" data-testid="confidence-score-card">
+            <p className="muted">Confidence Score</p>
+            <p className="score-text" style={{ color: scoreColor(confidenceScore) }}>
+              {confidenceScore.toFixed(1)}%
+            </p>
+            {isClient ? (
+              <div className="chart-box score-chart">
+                <ResponsiveContainer width="100%" height={220}>
+                  <RadialBarChart
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="55%"
+                    outerRadius="95%"
+                    barSize={20}
+                    data={confidenceRadialData}
+                    startAngle={180}
+                    endAngle={0}
+                  >
+                    <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+                    <RadialBar dataKey="value" cornerRadius={10} />
+                    <Tooltip />
+                  </RadialBarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <p className={`risk-badge ${riskClassName(riskLevel)}`}>Risk Level: {riskLevel}</p>
         <p className="muted">Nova calls used: {result?.metadata?.nova_calls_used ?? 0} / 3</p>
       </article>
 
@@ -121,9 +176,19 @@ export default function ResultsDashboard({ result, problem }) {
         </ul>
       </article>
 
+      <article className="card-panel card-span-6">
+        <h2>Decision Process Timeline</h2>
+        <ol className="process-timeline">
+          <li className="process-step">Step 1 - Market signals analyzed</li>
+          <li className="process-step">Step 2 - Document insights extracted</li>
+          <li className="process-step">Step 3 - Risks evaluated</li>
+          <li className="process-step">Step 4 - Strategy generated</li>
+        </ol>
+      </article>
+
       {reasoningSteps.length ? (
-        <article className="card-panel card-span-12">
-          <h2>Reasoning Timeline</h2>
+        <article className="card-panel card-span-6">
+          <h2>Model Reasoning Details</h2>
           <ol className="timeline-list">
             {reasoningSteps.map((step) => (
               <li key={step}>

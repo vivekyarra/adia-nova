@@ -47,6 +47,7 @@ class ParsedImage:
 class ParsedInputs:
     documents: list[ParsedDocument] = field(default_factory=list)
     images: list[ParsedImage] = field(default_factory=list)
+    image_captions: list[str] = field(default_factory=list)
     retrieved_context: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     invalid_files: list[str] = field(default_factory=list)
@@ -56,9 +57,15 @@ class ParsedInputs:
         return len(self.documents) + len(self.images)
 
     def text_context(self) -> str:
-        if not self.retrieved_context:
+        chunks: list[str] = []
+        if self.retrieved_context:
+            chunks.extend(self.retrieved_context)
+        if self.image_captions:
+            chunks.extend(self.image_captions)
+
+        if not chunks:
             return "No extracted text context."
-        return "\n".join(f"- {chunk}" for chunk in self.retrieved_context)
+        return "\n".join(f"- {chunk}" for chunk in chunks)
 
 
 class DocumentParser:
@@ -116,6 +123,7 @@ class DocumentParser:
                         data=raw,
                     )
                 )
+                parsed.image_captions.append(self._build_image_caption(name))
                 continue
 
             parsed.invalid_files.append(name)
@@ -207,3 +215,12 @@ class DocumentParser:
         if "." not in filename:
             return ""
         return "." + filename.split(".")[-1]
+
+    @staticmethod
+    def _build_image_caption(filename: str) -> str:
+        stem = filename.rsplit(".", 1)[0]
+        normalized = re.sub(r"[_\-]+", " ", stem)
+        normalized = re.sub(r"\s+", " ", normalized).strip().lower()
+        if not normalized:
+            normalized = "uploaded image"
+        return f"Image context from filename: {normalized}"

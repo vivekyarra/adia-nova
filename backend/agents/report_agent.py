@@ -16,6 +16,13 @@ class ReportAgent:
             viability_score = 50.0
         viability_score = max(0.0, min(100.0, viability_score))
 
+        confidence_score = reasoning.get("confidence_score", 60.0)
+        try:
+            confidence_score = float(confidence_score)
+        except (TypeError, ValueError):
+            confidence_score = 60.0
+        confidence_score = max(0.0, min(100.0, confidence_score))
+
         risks = dedupe_keep_order(
             list(reasoning.get("risks", [])) + list(analysis.get("risks", [])),
             limit=6,
@@ -27,6 +34,7 @@ class ReportAgent:
 
         report = {
             "viability_score": viability_score,
+            "confidence_score": confidence_score,
             "risks": risks,
             "opportunities": opportunities,
             "recommended_strategy": reasoning.get(

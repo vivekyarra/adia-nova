@@ -3,9 +3,22 @@ import { useState } from "react";
 const ACCEPTED_FILE_TYPES = ".pdf,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.webp";
 const MAX_FILES = 8;
 const SAMPLE_SCENARIOS = [
-  "Should a startup launch a food delivery app in Hyderabad?",
-  "Should an EV startup expand into rural India?",
-  "Should a SaaS company adopt usage-based pricing?"
+  {
+    label: "Startup Market Expansion",
+    prompt: "Should a startup pursue market expansion into a new metro in the next 12 months?"
+  },
+  {
+    label: "EV Charging Network Expansion",
+    prompt: "Should an EV startup expand charging infrastructure into tier-2 and rural regions?"
+  },
+  {
+    label: "AI SaaS Pricing Strategy",
+    prompt: "Should an AI SaaS company adopt usage-based pricing for growth?"
+  },
+  {
+    label: "Food Delivery Launch in Hyderabad",
+    prompt: "Should a startup launch a food delivery app in Hyderabad?"
+  }
 ];
 
 export default function DecisionForm({ onAnalyze, loading }) {
@@ -43,15 +56,15 @@ export default function DecisionForm({ onAnalyze, loading }) {
         <div className="sample-buttons">
           {SAMPLE_SCENARIOS.map((scenario) => (
             <button
-              key={scenario}
+              key={scenario.label}
               type="button"
               className="scenario-chip"
               onClick={() => {
-                setProblem(scenario);
+                setProblem(scenario.prompt);
                 setValidationError("");
               }}
             >
-              {scenario}
+              {scenario.label}
             </button>
           ))}
         </div>
