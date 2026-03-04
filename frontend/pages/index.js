@@ -1,16 +1,42 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DecisionForm from "../components/DecisionForm";
 import ResultsDashboard from "../components/ResultsDashboard";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const THINKING_STEPS = [
+  "Researching market signals...",
+  "Analyzing uploaded documents...",
+  "Evaluating risks and opportunities...",
+  "Generating decision report..."
+];
 
 export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [problem, setProblem] = useState("");
+  const [thinkingIndex, setThinkingIndex] = useState(0);
 
   const hasResult = useMemo(() => Boolean(result), [result]);
+
+  useEffect(() => {
+    if (!loading) {
+      setThinkingIndex(0);
+      return undefined;
+    }
+
+    setThinkingIndex(0);
+    const intervalId = setInterval(() => {
+      setThinkingIndex((current) => {
+        if (current >= THINKING_STEPS.length - 1) {
+          return current;
+        }
+        return current + 1;
+      });
+    }, 1600);
+
+    return () => clearInterval(intervalId);
+  }, [loading]);
 
   async function handleAnalyze(inputProblem, files) {
     setLoading(true);
@@ -67,6 +93,28 @@ export default function HomePage() {
       </section>
 
       <DecisionForm onAnalyze={handleAnalyze} loading={loading} />
+
+      {loading ? (
+        <section className="thinking-panel" aria-live="polite">
+          <p className="thinking-title">ADIA is thinking</p>
+          <ul className="thinking-list">
+            {THINKING_STEPS.map((step, index) => (
+              <li
+                key={step}
+                className={
+                  index < thinkingIndex
+                    ? "thinking-item thinking-complete"
+                    : index === thinkingIndex
+                      ? "thinking-item thinking-active"
+                      : "thinking-item"
+                }
+              >
+                {step}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {error ? <p className="error-banner">{error}</p> : null}
 
