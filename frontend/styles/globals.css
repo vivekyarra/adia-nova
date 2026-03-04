@@ -1,0 +1,236 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
+
+:root {
+  --bg-main: #f2eee8;
+  --bg-card: #fff8ef;
+  --ink-main: #132423;
+  --ink-muted: #4b5b59;
+  --accent: #0c9f77;
+  --accent-dark: #0b775a;
+  --border: #d7cbb8;
+  --danger: #b3372e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(12, 159, 119, 0.12), transparent 30%),
+    radial-gradient(circle at 90% 10%, rgba(203, 137, 77, 0.18), transparent 32%),
+    linear-gradient(180deg, #efe7db 0%, #f5f1eb 100%);
+  color: var(--ink-main);
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+p {
+  margin: 0;
+}
+
+.page-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 26px 18px 44px;
+  display: grid;
+  gap: 16px;
+}
+
+.hero-panel {
+  background: linear-gradient(120deg, #122824, #1b3f3a 68%, #29514a);
+  color: #f5fff8;
+  border-radius: 20px;
+  padding: 26px 24px;
+  border: 1px solid rgba(215, 203, 184, 0.35);
+  box-shadow: 0 16px 30px rgba(19, 36, 35, 0.2);
+}
+
+.hero-panel h1 {
+  margin-top: 6px;
+  margin-bottom: 8px;
+  font-size: clamp(1.45rem, 2.3vw, 2rem);
+}
+
+.eyebrow {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  opacity: 0.82;
+  text-transform: uppercase;
+}
+
+.card-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+  box-shadow: 0 10px 24px rgba(64, 59, 53, 0.08);
+}
+
+.form-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.text-area,
+.file-input {
+  width: 100%;
+  margin-top: 6px;
+  border: 1px solid #c7bda9;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fffdf8;
+  color: var(--ink-main);
+  font-size: 0.96rem;
+}
+
+.text-area {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.btn-primary {
+  margin-top: 4px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  color: white;
+  padding: 11px 16px;
+  font-weight: 700;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sample-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.scenario-chip {
+  border: 1px solid #c7bda9;
+  background: #fffdf8;
+  color: var(--ink-main);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.scenario-chip:hover {
+  border-color: #9d8f76;
+}
+
+.file-list,
+.insight-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.card-span-4 { grid-column: span 4; }
+.card-span-6 { grid-column: span 6; }
+.card-span-12 { grid-column: span 12; }
+
+.chart-box {
+  width: 100%;
+  min-height: 220px;
+}
+
+.score-text {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.muted {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.empty-state {
+  border-radius: 16px;
+  border: 1px dashed #b8ae99;
+  padding: 20px;
+  background: rgba(255, 253, 248, 0.7);
+}
+
+.error-banner,
+.error-inline {
+  color: var(--danger);
+  font-size: 0.95rem;
+}
+
+.timeline-list {
+  margin: 0;
+  padding-left: 0;
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+
+.timeline-list li {
+  position: relative;
+  padding-left: 26px;
+  line-height: 1.4;
+}
+
+.timeline-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(12, 159, 119, 0.15);
+}
+
+.timeline-list li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1rem;
+  width: 2px;
+  height: calc(100% + 4px);
+  background: #b9d5cb;
+}
+
+@media (max-width: 960px) {
+  .dashboard-grid > article,
+  .card-span-4,
+  .card-span-6,
+  .card-span-12 {
+    grid-column: span 12 !important;
+  }
+}
