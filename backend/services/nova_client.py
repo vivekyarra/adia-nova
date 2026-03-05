@@ -88,6 +88,10 @@ class NovaClient:
                 "Temporary AWS credentials detected (AWS_ACCESS_KEY_ID starts with ASIA). Set AWS_SESSION_TOKEN in backend/.env or Render Environment settings."
             )
 
+        if normalized_access_key and not normalized_access_key.upper().startswith("ASIA"):
+            # Session token is only valid for temporary credentials (ASIA*).
+            normalized_session_token = None
+
         self.model_id = model_id
         self.aws_region = normalized_region
         self._client = self._build_client(

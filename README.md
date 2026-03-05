@@ -88,7 +88,7 @@ Run backend:
 uvicorn main:app --reload
 ```
 
-For cloud deployment (Render), set the same AWS variables in service Environment settings. If you use temporary STS credentials (access key starts with `ASIA`), `AWS_SESSION_TOKEN` is mandatory or Bedrock requests can fail with `InvalidSignatureException` or `ExpiredTokenException`.
+For cloud deployment (Render), set the same AWS variables in service Environment settings. If you use temporary STS credentials (access key starts with `ASIA`), `AWS_SESSION_TOKEN` is mandatory. If you use long-term IAM user keys (access key starts with `AKIA`), leave `AWS_SESSION_TOKEN` empty.
 
 ### Frontend
 ```bash
