@@ -163,14 +163,13 @@ class NovaClient:
             ) from exc
         except ClientError as exc:
             code = exc.response.get("Error", {}).get("Code", "")
-            if code in {
-                "UnrecognizedClientException",
-                "InvalidSignatureException",
-                "AccessDeniedException",
-                "ExpiredTokenException",
-            }:
+            if code == "AccessDeniedException":
                 raise NovaAuthenticationError(
-                    f"Bedrock authentication failed ({code}). Verify IAM permissions and AWS credentials."
+                    "Bedrock access denied. Attach IAM permission bedrock:InvokeModel for amazon.nova-lite-v1:0 in AWS_REGION=us-east-1."
+                ) from exc
+            if code in {"UnrecognizedClientException", "InvalidSignatureException", "ExpiredTokenException"}:
+                raise NovaAuthenticationError(
+                    f"Bedrock authentication failed ({code}). Verify AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN (for temporary creds), and AWS_REGION=us-east-1 on Render."
                 ) from exc
             raise NovaInvocationError(f"Bedrock invoke_model failed ({code}): {exc}") from exc
         except BotoCoreError as exc:
