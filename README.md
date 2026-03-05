@@ -1,4 +1,4 @@
-# ADIA — Autonomous Decision Intelligence Agent
+# ADIA - Autonomous Decision Intelligence Agent
 
 ## Overview
 ADIA is an AI-powered decision intelligence system built for the Amazon Nova Hackathon. It helps teams evaluate strategic business questions using an agent-based reasoning workflow and optional uploaded evidence. The full application runs locally with FastAPI and Next.js, while model inference is handled through Amazon Nova on AWS Bedrock.
@@ -88,7 +88,7 @@ Run backend:
 uvicorn main:app --reload
 ```
 
-For cloud deployment (Render), set the same AWS variables in service Environment settings. If you use temporary STS credentials, `AWS_SESSION_TOKEN` is mandatory or Bedrock requests can fail with `InvalidSignatureException` or `ExpiredTokenException`.
+For cloud deployment (Render), set the same AWS variables in service Environment settings. If you use temporary STS credentials (access key starts with `ASIA`), `AWS_SESSION_TOKEN` is mandatory or Bedrock requests can fail with `InvalidSignatureException` or `ExpiredTokenException`.
 
 ### Frontend
 ```bash

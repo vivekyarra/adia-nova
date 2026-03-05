@@ -83,6 +83,11 @@ class NovaClient:
                 "AWS_SESSION_TOKEN requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
             )
 
+        if normalized_access_key and normalized_access_key.upper().startswith("ASIA") and not normalized_session_token:
+            raise NovaConfigurationError(
+                "Temporary AWS credentials detected (AWS_ACCESS_KEY_ID starts with ASIA). Set AWS_SESSION_TOKEN in backend/.env or Render Environment settings."
+            )
+
         self.model_id = model_id
         self.aws_region = normalized_region
         self._client = self._build_client(
