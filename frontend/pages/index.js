@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import AgentPipeline from "../components/AgentPipeline";
 import DecisionForm from "../components/DecisionForm";
 import ResultsDashboard from "../components/ResultsDashboard";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 const THINKING_STEPS = [
   "Researching market signals...",
   "Analyzing uploaded documents...",
@@ -46,7 +46,7 @@ export default function HomePage() {
 
     try {
       const endpoint = files.length > 0 ? "/analyze-with-docs" : "/analyze";
-      const url = `${API_BASE_URL}${endpoint}`;
+      const url = `${API_BASE}${endpoint}`;
 
       let response;
       if (files.length > 0) {
@@ -134,3 +134,4 @@ export default function HomePage() {
     </main>
   );
 }
+
