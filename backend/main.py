@@ -1,4 +1,4 @@
-"""FastAPI entrypoint for the ADIA decision intelligence app."""
+﻿"""FastAPI entrypoint for the ADIA decision intelligence app."""
 
 from __future__ import annotations
 
@@ -26,6 +26,18 @@ from services.nova_client import (
 
 load_dotenv()
 
+
+def parse_cors_origins() -> list[str]:
+    """Build CORS allowlist from defaults and optional environment variable."""
+    defaults = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    extra = os.getenv("CORS_ALLOW_ORIGINS", "")
+    if not extra.strip():
+        return defaults
+
+    parsed = [origin.strip() for origin in extra.split(",") if origin.strip()]
+    return defaults + parsed
+
+
 app = FastAPI(
     title="ADIA - Autonomous Decision Intelligence Agent",
     version="1.0.0",
@@ -34,8 +46,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
+    allow_origins=parse_cors_origins(),
+    # Allow hosted Vercel domains like https://adia-nova.vercel.app and preview URLs.
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

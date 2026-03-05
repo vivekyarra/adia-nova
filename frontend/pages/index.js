@@ -3,7 +3,7 @@ import AgentPipeline from "../components/AgentPipeline";
 import DecisionForm from "../components/DecisionForm";
 import ResultsDashboard from "../components/ResultsDashboard";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
 const THINKING_STEPS = [
   "Researching market signals...",
   "Analyzing uploaded documents...",
@@ -134,4 +134,5 @@ export default function HomePage() {
     </main>
   );
 }
+
 
