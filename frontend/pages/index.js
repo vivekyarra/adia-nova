@@ -1,9 +1,18 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AgentPipeline from "../components/AgentPipeline";
 import DecisionForm from "../components/DecisionForm";
 import ResultsDashboard from "../components/ResultsDashboard";
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+const rawApiBase = (process.env.NEXT_PUBLIC_API_URL || "")
+  .trim()
+  .replace(/^"|"$/g, "")
+  .replace(/^'|'$/g, "");
+const API_BASE = rawApiBase
+  ? rawApiBase.replace(/\/$/, "")
+  : process.env.NODE_ENV === "development"
+    ? "http://localhost:8000"
+    : "";
+
 const THINKING_STEPS = [
   "Researching market signals...",
   "Analyzing uploaded documents...",
@@ -45,6 +54,10 @@ export default function HomePage() {
     setProblem(inputProblem);
 
     try {
+      if (!API_BASE) {
+        throw new Error("Frontend API is not configured. Set NEXT_PUBLIC_API_URL.");
+      }
+
       const endpoint = files.length > 0 ? "/analyze-with-docs" : "/analyze";
       const url = `${API_BASE}${endpoint}`;
 
@@ -134,5 +147,3 @@ export default function HomePage() {
     </main>
   );
 }
-
-

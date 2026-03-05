@@ -1,4 +1,4 @@
-﻿"""FastAPI entrypoint for the ADIA decision intelligence app."""
+"""FastAPI entrypoint for the ADIA decision intelligence app."""
 
 from __future__ import annotations
 
@@ -91,6 +91,7 @@ def build_orchestrator() -> ADIAOrchestrator:
         aws_region=os.getenv("AWS_REGION", ""),
         aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        aws_session_token=os.getenv("AWS_SESSION_TOKEN"),
     )
     return ADIAOrchestrator(nova_client=nova_client)
 
@@ -183,3 +184,4 @@ async def handle_nova_invoke_error(_: Request, exc: NovaInvocationError):
 @app.exception_handler(InvalidUploadError)
 async def handle_upload_error(_: Request, exc: InvalidUploadError):
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
