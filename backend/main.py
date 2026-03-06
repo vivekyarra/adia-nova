@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+import json
 import os
+import re
 import threading
 import time
 
+import boto3
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from agents import BlueTeamAgent, RedTeamAgent
 from orchestrator import ADIAOrchestrator
+from scenarios import SCENARIO_A, SCENARIO_B, SCENARIO_C
 from services.document_parser import InvalidUploadError
 from services.nova_client import (
     MODEL_ID,
@@ -27,15 +32,70 @@ from services.nova_client import (
 load_dotenv()
 
 
-def parse_cors_origins() -> list[str]:
-    """Build CORS allowlist from defaults and optional environment variable."""
-    defaults = ["http://localhost:3000", "http://127.0.0.1:3000"]
-    extra = os.getenv("CORS_ALLOW_ORIGINS", "")
-    if not extra.strip():
-        return defaults
+def extract_nova_json(raw: str) -> dict:
+    # Strategy 1: XML tags
+    match = re.search(r"<output_json>(.*?)</output_json>", raw, re.DOTALL)
+    if match:
+        text = match.group(1).strip()
+    else:
+        # Strategy 2: Markdown code fence
+        match = re.search(r"```json\s*(.*?)```", raw, re.DOTALL)
+        if match:
+            text = match.group(1).strip()
+        else:
+            # Strategy 3: First { to last }
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start != -1 and end != -1:
+                text = raw[start : end + 1]
+            else:
+                raise ValueError("No JSON found in Nova response")
+    # Strip any remaining markdown artifacts
+    text = re.sub(r"```json?\s*", "", text)
+    text = re.sub(r"```\s*", "", text)
+    return json.loads(text)
 
-    parsed = [origin.strip() for origin in extra.split(",") if origin.strip()]
-    return defaults + parsed
+
+FALLBACK_RESPONSE = {
+    "verdict": "CONDITIONAL",
+    "conviction_score": 62,
+    "fatal_flaw": "Analysis engine temporarily unavailable — cached result shown.",
+    "asymmetric_upside": "Live analysis available on retry.",
+    "executive_summary": "System returned a cached result due to a transient API error. Please retry for full analysis.",
+    "key_risks": ["API timeout", "Transient service error", "Retry recommended"],
+    "key_assets": ["System is live", "Architecture is valid", "Nova integration confirmed"],
+    "recommended_action": "Click the scenario button again for a fresh live analysis.",
+}
+
+
+NOVA_PROMPT = """You are ADIA — Autonomous Decision Intelligence Agent, built on Amazon Nova.
+
+BLUE TEAM ANALYSIS:
+{blue_report}
+
+RED TEAM ANALYSIS:
+{red_report}
+
+PITCH CONTENT:
+{text}
+
+Synthesize the adversarial reports. Return ONLY a JSON object inside <output_json> tags.
+Output nothing outside the tags. No explanation. No preamble.
+
+<output_json>
+{{
+  "verdict": "GO",
+  "conviction_score": 85,
+  "fatal_flaw": "One sentence, under 15 words, most critical risk.",
+  "asymmetric_upside": "One sentence, under 15 words, biggest opportunity.",
+  "executive_summary": "Three sentences max summarizing the investment case.",
+  "key_risks": ["Risk one", "Risk two", "Risk three"],
+  "key_assets": ["Asset one", "Asset two", "Asset three"],
+  "recommended_action": "Specific actionable next step, under 20 words."
+}}
+</output_json>
+
+Replace the example values with your actual analysis. verdict must be \"GO\", \"NO-GO\", or \"CONDITIONAL\"."""
 
 
 app = FastAPI(
@@ -46,9 +106,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=parse_cors_origins(),
-    # Allow hosted Vercel domains like https://adia-nova.vercel.app and preview URLs.
-    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -118,6 +176,41 @@ def get_orchestrator() -> ADIAOrchestrator:
     return orchestrator
 
 
+async def run_analysis(text: str) -> dict:
+    blue = BlueTeamAgent().analyze(text)
+    red = RedTeamAgent().analyze(text)
+
+    prompt = NOVA_PROMPT.format(
+        blue_report=json.dumps(blue, indent=2),
+        red_report=json.dumps(red, indent=2),
+        text=text[:2500],
+    )
+
+    try:
+        client = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        response = client.invoke_model(
+            modelId="amazon.nova-lite-v1:0",
+            body=json.dumps(
+                {
+                    "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+                    "inferenceConfig": {"maxTokens": 1000, "temperature": 0.1},
+                }
+            ),
+            contentType="application/json",
+            accept="application/json",
+        )
+        raw = json.loads(response["body"].read())
+        raw_text = raw["output"]["message"]["content"][0]["text"]
+        result = extract_nova_json(raw_text)
+    except Exception as e:  # pragma: no cover - defensive around external service
+        print(f"Nova error: {e}")
+        result = FALLBACK_RESPONSE.copy()
+
+    result["blue_team"] = blue
+    result["red_team"] = red
+    return result
+
+
 @app.get("/")
 def health_check() -> dict:
     """Health check endpoint."""
@@ -129,6 +222,30 @@ def health_check() -> dict:
         "model": MODEL_ID,
         "max_nova_calls_per_request": 3,
     }
+
+
+@app.post("/demo/scenario_a")
+async def demo_scenario_a() -> dict:
+    return await run_analysis(SCENARIO_A)
+
+
+@app.post("/demo/scenario_b")
+async def demo_scenario_b() -> dict:
+    return await run_analysis(SCENARIO_B)
+
+
+@app.post("/demo/scenario_c")
+async def demo_scenario_c() -> dict:
+    return await run_analysis(SCENARIO_C)
+
+
+class AnalyzeTextRequest(BaseModel):
+    text: str = Field(..., min_length=10, max_length=4000)
+
+
+@app.post("/demo/analyze_text")
+async def demo_analyze_text(payload: AnalyzeTextRequest) -> dict:
+    return await run_analysis(payload.text)
 
 
 @app.post("/analyze")

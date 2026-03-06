@@ -1,149 +1,464 @@
-import { useEffect, useMemo, useState } from "react";
-import AgentPipeline from "../components/AgentPipeline";
-import DecisionForm from "../components/DecisionForm";
-import ResultsDashboard from "../components/ResultsDashboard";
+import { useState } from "react";
+import TerminalLoader from "../components/TerminalLoader";
+import VerdictPanel from "../components/VerdictPanel";
+import KnowledgeGraph from "../components/KnowledgeGraph";
 
-const rawApiBase = (process.env.NEXT_PUBLIC_API_URL || "")
-  .trim()
-  .replace(/^"|"$/g, "")
-  .replace(/^'|'$/g, "");
-const API_BASE = rawApiBase
-  ? rawApiBase.replace(/\/$/, "")
-  : process.env.NODE_ENV === "development"
-    ? "http://localhost:8000"
-    : "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://adia-nova.onrender.com";
 
-const THINKING_STEPS = [
-  "Researching market signals...",
-  "Analyzing uploaded documents...",
-  "Evaluating risks and opportunities...",
-  "Generating decision report..."
-];
+async function runScenario(endpoint, setResult, setError, setIsLoading) {
+  setIsLoading(true);
+  setResult(null);
+  setError(null);
+  try {
+    const [data] = await Promise.all([
+      fetch(`${API_BASE}${endpoint}`, { method: "POST" }).then((r) => r.json()),
+      new Promise((resolve) => setTimeout(resolve, 6000)),
+    ]);
+    setResult(data);
+  } catch (e) {
+    setError("Analysis failed. Please try again or use a demo scenario.");
+  } finally {
+    setIsLoading(false);
+  }
+}
+
+async function runFreeTextAnalysis(text, setResult, setError, setIsLoading) {
+  setIsLoading(true);
+  setResult(null);
+  setError(null);
+  try {
+    const [data] = await Promise.all([
+      fetch(`${API_BASE}/demo/analyze_text`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      }).then((r) => r.json()),
+      new Promise((resolve) => setTimeout(resolve, 6000)),
+    ]);
+    setResult(data);
+  } catch (e) {
+    setError("Analysis failed. Please try again or use a demo scenario.");
+  } finally {
+    setIsLoading(false);
+  }
+}
 
 export default function HomePage() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [result, setResult] = useState(null);
-  const [problem, setProblem] = useState("");
-  const [thinkingIndex, setThinkingIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [freeText, setFreeText] = useState("");
 
-  const hasResult = useMemo(() => Boolean(result), [result]);
+  const hasResult = Boolean(result);
 
-  useEffect(() => {
-    if (!loading) {
-      setThinkingIndex(0);
-      return undefined;
-    }
+  const handleNewAnalysis = () => {
+    setResult(null);
+    setError(null);
+    setFreeText("");
+  };
 
-    setThinkingIndex(0);
-    const intervalId = setInterval(() => {
-      setThinkingIndex((current) => {
-        if (current >= THINKING_STEPS.length - 1) {
-          return current;
-        }
-        return current + 1;
-      });
-    }, 1600);
-
-    return () => clearInterval(intervalId);
-  }, [loading]);
-
-  async function handleAnalyze(inputProblem, files) {
-    setLoading(true);
-    setError("");
-    setProblem(inputProblem);
-
-    try {
-      if (!API_BASE) {
-        throw new Error("Frontend API is not configured. Set NEXT_PUBLIC_API_URL.");
-      }
-
-      const endpoint = files.length > 0 ? "/analyze-with-docs" : "/analyze";
-      const url = `${API_BASE}${endpoint}`;
-
-      let response;
-      if (files.length > 0) {
-        const formData = new FormData();
-        formData.append("problem", inputProblem);
-        formData.append("include_reasoning", "true");
-        files.forEach((file) => formData.append("files", file));
-
-        response = await fetch(url, {
-          method: "POST",
-          body: formData
-        });
-      } else {
-        response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ problem: inputProblem, include_reasoning: true })
-        });
-      }
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.detail || "Request failed.");
-      }
-
-      const payload = await response.json();
-      setResult(payload);
-    } catch (requestError) {
-      setResult(null);
-      setError(requestError.message || "Unable to analyze this request.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const handleAnalyzeClick = async () => {
+    if (!freeText.trim()) return;
+    await runFreeTextAnalysis(freeText.trim(), setResult, setError, setIsLoading);
+  };
 
   return (
-    <main className="page-shell">
-      <section className="hero-panel">
-        <p className="eyebrow">ADIA</p>
-        <h1>Autonomous Decision Intelligence Agent</h1>
-        <p>
-          Evaluate startup decisions with agentic reasoning powered by Amazon Nova and grounded in your
-          uploaded evidence.
-        </p>
-      </section>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <TerminalLoader isVisible={isLoading} />
 
-      <DecisionForm onAnalyze={handleAnalyze} loading={loading} />
+      <header
+        style={{
+          padding: "20px 32px 10px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "var(--display)",
+            fontWeight: 800,
+            fontSize: 24,
+            letterSpacing: "0.3em",
+            color: "var(--green)",
+            textShadow: "var(--glow-green)",
+          }}
+        >
+          ADIA
+        </div>
+        {hasResult && (
+          <button
+            type="button"
+            onClick={handleNewAnalysis}
+            style={{
+              border: "1px solid var(--border-active)",
+              background: "transparent",
+              color: "var(--text)",
+              fontFamily: "var(--mono)",
+              fontSize: 12,
+              letterSpacing: "0.18em",
+              padding: "8px 16px",
+              cursor: "pointer",
+              textTransform: "uppercase",
+            }}
+          >
+            ← NEW ANALYSIS
+          </button>
+        )}
+      </header>
 
-      {loading ? (
-        <section className="thinking-panel" aria-live="polite">
-          <p className="thinking-title">ADIA is thinking</p>
-          <ul className="thinking-list">
-            {THINKING_STEPS.map((step, index) => (
-              <li
-                key={step}
-                className={
-                  index < thinkingIndex
-                    ? "thinking-item thinking-complete"
-                    : index === thinkingIndex
-                      ? "thinking-item thinking-active"
-                      : "thinking-item"
-                }
+      {!hasResult && (
+        <main
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px 16px 40px",
+          }}
+        >
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <div
+              style={{
+                fontFamily: "var(--display)",
+                fontWeight: 800,
+                fontSize: 80,
+                letterSpacing: "0.08em",
+                color: "var(--green)",
+                textShadow: "var(--glow-green)",
+              }}
+            >
+              ADIA
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                fontFamily: "var(--mono)",
+                fontSize: 11,
+                letterSpacing: "0.4em",
+                color: "#333",
+              }}
+            >
+              AUTONOMOUS DECISION INTELLIGENCE AGENT
+            </div>
+            <div
+              style={{
+                marginTop: 6,
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                letterSpacing: "0.3em",
+                color: "#555",
+              }}
+            >
+              POWERED BY AMAZON NOVA
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              gap: 16,
+              marginBottom: 24,
+              opacity: isLoading ? 0.3 : 1,
+              pointerEvents: isLoading ? "none" : "auto",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => runScenario("/demo/scenario_a", setResult, setError, setIsLoading)}
+              style={{
+                width: 240,
+                padding: "20px 16px",
+                background: "#060606",
+                border: "1px solid #1e1e1e",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                textAlign: "left",
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.borderColor = "var(--green)";
+                e.currentTarget.style.boxShadow = "var(--glow-green)";
+                e.currentTarget.style.background = "#0a0a0a";
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.borderColor = "#1e1e1e";
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.background = "#060606";
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 9,
+                  letterSpacing: "0.3em",
+                  color: "var(--green)",
+                  marginBottom: 8,
+                }}
               >
-                {step}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+                GO CANDIDATE
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--display)",
+                  fontWeight: 600,
+                  fontSize: 16,
+                  color: "var(--text)",
+                  marginBottom: 4,
+                }}
+              >
+                SCENARIO: AI SAAS
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  color: "#444",
+                }}
+              >
+                VectorMind AI · Series A
+              </div>
+            </button>
 
-      {error ? <p className="error-banner">{error}</p> : null}
+            <button
+              type="button"
+              onClick={() => runScenario("/demo/scenario_b", setResult, setError, setIsLoading)}
+              style={{
+                width: 240,
+                padding: "20px 16px",
+                background: "#060606",
+                border: "1px solid #1e1e1e",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                textAlign: "left",
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.borderColor = "var(--red)";
+                e.currentTarget.style.boxShadow = "var(--glow-red)";
+                e.currentTarget.style.background = "#0a0a0a";
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.borderColor = "#1e1e1e";
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.background = "#060606";
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 9,
+                  letterSpacing: "0.3em",
+                  color: "var(--red)",
+                  marginBottom: 8,
+                }}
+              >
+                NO-GO CANDIDATE
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--display)",
+                  fontWeight: 600,
+                  fontSize: 16,
+                  color: "var(--text)",
+                  marginBottom: 4,
+                }}
+              >
+                SCENARIO: CRYPTO SCAM
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  color: "#444",
+                }}
+              >
+                MoonChain Protocol · Pre-seed
+              </div>
+            </button>
 
-      {(loading || hasResult) ? (
-        <AgentPipeline loading={loading} currentStepIndex={thinkingIndex} hasResult={hasResult} />
-      ) : null}
+            <button
+              type="button"
+              onClick={() => runScenario("/demo/scenario_c", setResult, setError, setIsLoading)}
+              style={{
+                width: 240,
+                padding: "20px 16px",
+                background: "#060606",
+                border: "1px solid #1e1e1e",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                textAlign: "left",
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.borderColor = "var(--amber)";
+                e.currentTarget.style.boxShadow = "var(--glow-amber)";
+                e.currentTarget.style.background = "#0a0a0a";
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.borderColor = "#1e1e1e";
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.background = "#060606";
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 9,
+                  letterSpacing: "0.3em",
+                  color: "var(--amber)",
+                  marginBottom: 8,
+                }}
+              >
+                CONDITIONAL
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--display)",
+                  fontWeight: 600,
+                  fontSize: 16,
+                  color: "var(--text)",
+                  marginBottom: 4,
+                }}
+              >
+                SCENARIO: HARDWARE BURN
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  color: "#444",
+                }}
+              >
+                NeuralChip Systems · Series B
+              </div>
+            </button>
+          </div>
 
-      {hasResult ? (
-        <ResultsDashboard result={result} problem={problem} />
-      ) : (
-        <section className="empty-state">
-          <h3>Ready for analysis</h3>
-          <p>Enter a decision question, upload optional supporting files, and run ADIA.</p>
-        </section>
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 780,
+              opacity: isLoading ? 0.3 : 1,
+              pointerEvents: isLoading ? "none" : "auto",
+            }}
+          >
+            <div
+              style={{
+                height: 1,
+                background: "#1a1a1a",
+                marginBottom: 16,
+              }}
+            />
+            <textarea
+              value={freeText}
+              onChange={(e) => setFreeText(e.target.value)}
+              rows={4}
+              placeholder="Or paste a pitch deck / business description..."
+              style={{
+                width: "100%",
+                background: "#060606",
+                border: "1px solid #1e1e1e",
+                color: "var(--text)",
+                fontFamily: "var(--mono)",
+                fontSize: 13,
+                padding: "12px 14px",
+                borderRadius: 4,
+                resize: "vertical",
+                outline: "none",
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = "var(--green)";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = "#1e1e1e";
+              }}
+            />
+            <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={handleAnalyzeClick}
+                style={{
+                  fontFamily: "var(--display)",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  padding: "12px 32px",
+                  borderRadius: 4,
+                  border: "1px solid var(--green)",
+                  background: "transparent",
+                  color: "var(--green)",
+                  letterSpacing: "0.2em",
+                  cursor: "pointer",
+                  textTransform: "uppercase",
+                  transition: "background 0.15s ease",
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = "rgba(0,255,157,0.08)";
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                }}
+              >
+                ANALYZE →
+              </button>
+            </div>
+            {error && (
+              <div
+                style={{
+                  marginTop: 10,
+                  fontFamily: "var(--mono)",
+                  fontSize: 12,
+                  color: "var(--red)",
+                }}
+              >
+                {error}
+              </div>
+            )}
+          </div>
+        </main>
       )}
-    </main>
+
+      {hasResult && (
+        <main
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "row",
+            minHeight: 0,
+          }}
+        >
+          <div
+            style={{
+              flexBasis: "55%",
+              minWidth: 0,
+              padding: 24,
+              opacity: result ? 1 : 0,
+              transition: "opacity 300ms ease-out 200ms",
+            }}
+          >
+            <KnowledgeGraph novaResult={result} />
+          </div>
+          <div
+            style={{
+              flexBasis: "45%",
+              minWidth: 0,
+              transform: result ? "translateX(0)" : "translateX(60px)",
+              opacity: result ? 1 : 0,
+              transition: "all 400ms ease-out",
+              borderLeft: "1px solid var(--border)",
+            }}
+          >
+            <VerdictPanel result={result} />
+          </div>
+        </main>
+      )}
+    </div>
   );
 }
+

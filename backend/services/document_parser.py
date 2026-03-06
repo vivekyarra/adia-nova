@@ -94,7 +94,11 @@ class DocumentParser:
                 continue
 
             if ext in SUPPORTED_PDF_EXTENSIONS:
-                text = self._extract_pdf_text(raw)
+                try:
+                    text = self._extract_pdf_text(raw)
+                except InvalidUploadError as exc:
+                    parsed.invalid_files.append(name)
+                    raise exc
                 if text.strip():
                     parsed.documents.append(ParsedDocument(name=name, text=text, source_type="pdf"))
                     all_chunks.extend(self._chunk_text(text))
@@ -136,11 +140,23 @@ class DocumentParser:
 
     @staticmethod
     def _extract_pdf_text(raw: bytes) -> str:
-        reader = PdfReader(BytesIO(raw))
-        pages: list[str] = []
-        for page in reader.pages:
-            pages.append(page.extract_text() or "")
-        return "\n".join(pages).strip()
+        try:
+            reader = PdfReader(BytesIO(raw))
+            pages: list[str] = []
+            for page in reader.pages:
+                pages.append(page.extract_text() or "")
+            text = "\n".join(pages).strip()
+        except Exception as exc:  # pragma: no cover - defensive against bad PDFs
+            raise InvalidUploadError(
+                "Could not extract text from this PDF. Please upload a text-based PDF (not a scanned image)."
+            ) from exc
+
+        if len(text) < 50:
+            raise InvalidUploadError(
+                "Could not extract text from this PDF. Please upload a text-based PDF (not a scanned image)."
+            )
+
+        return text
 
     @staticmethod
     def _chunk_text(text: str, chunk_size: int = 800, overlap: int = 120) -> list[str]:
