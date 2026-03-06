@@ -127,22 +127,25 @@ async def run_analysis(text: str) -> dict:
             aws_session_token=aws_token,
         )
 
-        body = json.dumps(
-            {
-                "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
-                "inferenceConfig": {"maxTokens": 1000, "temperature": 0.1},
-            }
-        )
-
-        response = client.invoke_model(
+        response = client.converse(
             modelId=MODEL_ID,
-            body=body,
-            contentType="application/json",
-            accept="application/json",
+            system=[
+                {
+                    "text": (
+                        "You are ADIA, a venture investment analyst. "
+                        "Return only the requested JSON payload."
+                    )
+                }
+            ],
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inferenceConfig={"maxTokens": 1000, "temperature": 0.1},
         )
 
-        raw = json.loads(response["body"].read())
-        raw_text = raw["output"]["message"]["content"][0]["text"]
+        raw_text = "\n".join(
+            item.get("text", "")
+            for item in response["output"]["message"]["content"]
+            if "text" in item
+        )
         result = extract_nova_json(raw_text)
 
     except Exception as exc:
@@ -308,3 +311,4 @@ async def analyze_with_docs(
             )
 
     return await run_analysis(combined_text)
+
