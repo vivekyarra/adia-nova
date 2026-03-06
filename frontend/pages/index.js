@@ -3,80 +3,73 @@ import TerminalLoader from "../components/TerminalLoader";
 import VerdictPanel from "../components/VerdictPanel";
 import KnowledgeGraph from "../components/KnowledgeGraph";
 
-const rawApiBase = (process.env.NEXT_PUBLIC_API_URL || "")
-  .trim()
-  .replace(/^"|"$/g, "")
-  .replace(/^'|'$/g, "");
-
-const API_BASE = rawApiBase
-  ? rawApiBase.replace(/\/$/, "")
-  : process.env.NODE_ENV === "development"
-  ? "http://localhost:8000"
-  : "https://adia-nova.onrender.com";
+const API_BASE =
+  (process.env.NEXT_PUBLIC_API_URL || "https://adia-nova.onrender.com")
+    .trim().replace(/\/$/, "");
 
 const SCENARIOS = [
   {
-    id: "a",
-    endpoint: "/demo/scenario_a",
-    badge: "GO CANDIDATE",
-    badgeColor: "var(--green)",
-    title: "SCENARIO: AI SAAS",
-    sub: "VectorMind AI · Series A · $180K ARR",
-    hoverBorder: "#00ff9d",
-    hoverGlow: "0 0 16px rgba(0,255,157,0.2), 0 0 40px rgba(0,255,157,0.06)",
+    id: "a", endpoint: "/demo/scenario_a",
+    tag: "GO CANDIDATE", tagColor: "var(--green)", tagBg: "var(--green-glow)",
+    title: "AI SaaS", subtitle: "VectorMind AI · Series A · $180K ARR",
+    accent: "var(--green)",
   },
   {
-    id: "b",
-    endpoint: "/demo/scenario_b",
-    badge: "NO-GO CANDIDATE",
-    badgeColor: "var(--red)",
-    title: "SCENARIO: CRYPTO SCAM",
-    sub: "MoonChain Protocol · Pre-seed · $0 ARR",
-    hoverBorder: "#ff003c",
-    hoverGlow: "0 0 16px rgba(255,0,60,0.2), 0 0 40px rgba(255,0,60,0.06)",
+    id: "b", endpoint: "/demo/scenario_b",
+    tag: "NO-GO CANDIDATE", tagColor: "var(--red)", tagBg: "var(--red-glow)",
+    title: "Crypto Scam", subtitle: "MoonChain Protocol · Pre-seed · $0 ARR",
+    accent: "var(--red)",
   },
   {
-    id: "c",
-    endpoint: "/demo/scenario_c",
-    badge: "CONDITIONAL",
-    badgeColor: "var(--amber)",
-    title: "SCENARIO: HARDWARE BURN",
-    sub: "NeuralChip Systems · Series B · $1.1M ARR",
-    hoverBorder: "#ffb800",
-    hoverGlow: "0 0 16px rgba(255,184,0,0.2), 0 0 40px rgba(255,184,0,0.06)",
+    id: "c", endpoint: "/demo/scenario_c",
+    tag: "CONDITIONAL", tagColor: "var(--amber)", tagBg: "var(--amber-glow)",
+    title: "Hardware Burn", subtitle: "NeuralChip Systems · Series B · $1.1M ARR",
+    accent: "var(--amber)",
   },
 ];
 
-function ScenarioButton({ scenario, onClick, disabled }) {
+function Badge({ color, bg, children }) {
+  return (
+    <span style={{
+      fontFamily: "var(--mono)", fontSize: 10, fontWeight: 500,
+      color, background: bg, border: `1px solid ${color}33`,
+      borderRadius: 4, padding: "2px 8px", letterSpacing: "0.08em",
+      textTransform: "uppercase", whiteSpace: "nowrap",
+    }}>
+      {children}
+    </span>
+  );
+}
+
+function ScenarioCard({ s, onClick, disabled }) {
   const [hovered, setHovered] = useState(false);
   return (
     <button
-      onClick={() => !disabled && onClick(scenario.endpoint)}
+      onClick={() => !disabled && onClick(s.endpoint)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       disabled={disabled}
       style={{
-        width: 230,
-        padding: "18px 16px",
-        background: hovered ? "#0c0c0c" : "#060606",
-        border: `1px solid ${hovered ? scenario.hoverBorder : "#1e1e1e"}`,
-        borderRadius: 4,
-        cursor: disabled ? "not-allowed" : "pointer",
-        textAlign: "left",
-        transition: "border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease",
-        boxShadow: hovered ? scenario.hoverGlow : "none",
-        opacity: disabled ? 0.35 : 1,
-        outline: "none",
+        flex: "1 1 200px", minWidth: 180, maxWidth: 280,
+        padding: "18px 18px 16px",
+        background: hovered ? "var(--bg-3)" : "var(--bg-2)",
+        border: `1px solid ${hovered ? s.accent + "55" : "var(--border)"}`,
+        borderRadius: 10, cursor: disabled ? "not-allowed" : "pointer",
+        textAlign: "left", transition: "all 0.18s ease",
+        boxShadow: hovered ? `0 0 0 1px ${s.accent}22, 0 8px 24px rgba(0,0,0,0.3)` : "none",
+        opacity: disabled ? 0.4 : 1, outline: "none",
       }}
     >
-      <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: scenario.badgeColor, letterSpacing: "0.3em", marginBottom: 8, textTransform: "uppercase" }}>
-        {scenario.badge}
+      <Badge color={s.tagColor} bg={s.tagBg}>{s.tag}</Badge>
+      <div style={{
+        fontFamily: "var(--display)", fontWeight: 700, fontSize: 16,
+        color: "var(--text)", marginTop: 10, marginBottom: 4,
+        letterSpacing: "-0.01em",
+      }}>
+        {s.title}
       </div>
-      <div style={{ fontFamily: "var(--display)", fontWeight: 600, fontSize: 14, color: "#e8e8e8", marginBottom: 6 }}>
-        {scenario.title}
-      </div>
-      <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "#3a3a3a" }}>
-        {scenario.sub}
+      <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
+        {s.subtitle}
       </div>
     </button>
   );
@@ -86,63 +79,39 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
-  const [textInput, setTextInput] = useState("");
+  const [text, setText] = useState("");
   const [file, setFile] = useState(null);
 
-  const hasResult = Boolean(result);
-
-  async function runEndpoint(endpoint) {
-    setLoading(true);
-    setError("");
-    setResult(null);
+  async function run(endpoint, isText = false, textVal = "") {
+    setLoading(true); setResult(null); setError("");
     try {
-      const [data] = await Promise.all([
-        fetch(`${API_BASE}${endpoint}`, { method: "POST" }).then(async (r) => {
-          if (!r.ok) {
-            const payload = await r.json().catch(() => ({}));
-            throw new Error(payload.error || payload.detail || "Request failed.");
-          }
-          return r.json();
-        }),
-        new Promise((resolve) => setTimeout(resolve, 6000)),
-      ]);
-      setResult(data);
-    } catch (e) {
-      setError("Analysis failed. Please try again or use a demo scenario.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleAnalyzeText() {
-    if (!textInput.trim() || textInput.trim().length < 10) return;
-    setLoading(true);
-    setError("");
-    setResult(null);
-    try {
-      let fetchPromise;
-      if (file) {
-        const formData = new FormData();
-        formData.append("problem", textInput.trim());
-        formData.append("include_reasoning", "true");
-        formData.append("files", file);
-        fetchPromise = fetch(`${API_BASE}/analyze-with-docs`, { method: "POST", body: formData });
-      } else {
-        fetchPromise = fetch(`${API_BASE}/analyze`, {
+      let fetchP;
+      if (isText && file) {
+        const fd = new FormData();
+        fd.append("problem", textVal);
+        fd.append("include_reasoning", "true");
+        fd.append("files", file);
+        fetchP = fetch(`${API_BASE}/analyze-with-docs`, { method: "POST", body: fd });
+      } else if (isText) {
+        fetchP = fetch(`${API_BASE}/analyze`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ problem: textInput.trim(), include_reasoning: true }),
+          body: JSON.stringify({ problem: textVal, include_reasoning: true }),
         });
+      } else {
+        fetchP = fetch(`${API_BASE}${endpoint}`, { method: "POST" });
       }
-      const [response] = await Promise.all([
-        fetchPromise,
-        new Promise((resolve) => setTimeout(resolve, 6000)),
+
+      const [res] = await Promise.all([
+        fetchP,
+        new Promise(r => setTimeout(r, 6000)),
       ]);
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || payload.detail || "Request failed.");
+
+      if (!res.ok) {
+        const p = await res.json().catch(() => ({}));
+        throw new Error(p.error || p.detail || "Request failed.");
       }
-      const data = await response.json();
+      const data = await res.json();
       setResult(data);
     } catch (e) {
       setError("Analysis failed. Please try again or use a demo scenario.");
@@ -151,111 +120,202 @@ export default function HomePage() {
     }
   }
 
-  function reset() {
-    setResult(null);
-    setError("");
-    setTextInput("");
-    setFile(null);
-  }
+  const reset = () => { setResult(null); setError(""); setText(""); setFile(null); };
 
   return (
     <>
       <style>{`
-        @keyframes fadeIn { from { opacity:0; transform:translateY(6px);} to { opacity:1; transform:translateY(0);} }
-        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
-        @keyframes pulseGreen { 0%,100%{text-shadow:var(--glow-green);} 50%{text-shadow:0 0 40px rgba(0,255,157,0.8),0 0 80px rgba(0,255,157,0.3);} }
-        @keyframes pulseRed { 0%,100%{text-shadow:var(--glow-red);} 50%{text-shadow:0 0 40px rgba(255,0,60,0.8),0 0 80px rgba(255,0,60,0.3);} }
-        textarea:focus { outline:none; border-color:var(--green) !important; }
-        button:focus { outline:none; }
+        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+        @keyframes pulseGreen{0%,100%{box-shadow:0 0 0 0 rgba(63,185,80,0)}50%{box-shadow:0 0 20px 4px rgba(63,185,80,0.2)}}
+        @keyframes pulseRed{0%,100%{box-shadow:0 0 0 0 rgba(248,81,73,0)}50%{box-shadow:0 0 20px 4px rgba(248,81,73,0.2)}}
+        textarea:focus{outline:none;border-color:var(--blue)!important;box-shadow:0 0 0 3px var(--blue-glow)!important}
+        button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
       `}</style>
 
       <TerminalLoader isVisible={loading} />
 
-      {/* HEADER */}
-      <div style={{ position:"fixed", top:0, left:0, right:0, height:52, background:"rgba(0,0,0,0.92)", borderBottom:"1px solid #1a1a1a", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 24px", zIndex:100, backdropFilter:"blur(8px)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <span style={{ fontFamily:"var(--display)", fontWeight:800, fontSize:20, color:"var(--green)", textShadow:"0 0 12px rgba(0,255,157,0.5)", letterSpacing:"0.05em" }}>ADIA</span>
-          <span style={{ fontFamily:"var(--mono)", fontSize:9, color:"#2a2a2a", letterSpacing:"0.3em" }}>AUTONOMOUS DECISION INTELLIGENCE</span>
+      {/* ── TOPBAR ── */}
+      <header style={{
+        position: "fixed", top: 0, left: 0, right: 0, height: 56,
+        background: "rgba(8,12,16,0.88)", backdropFilter: "blur(12px)",
+        borderBottom: "1px solid var(--border)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 24px", zIndex: 200,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{
+            fontFamily: "var(--display)", fontWeight: 800, fontSize: 18,
+            color: "var(--green)", letterSpacing: "-0.02em",
+          }}>
+            ADIA
+          </div>
+          <div style={{ width: 1, height: 18, background: "var(--border)" }} />
+          <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-3)", letterSpacing: "0.1em" }}>
+            DECISION INTELLIGENCE
+          </span>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-          <span style={{ fontFamily:"var(--mono)", fontSize:9, color:"#333", letterSpacing:"0.25em" }}>POWERED BY AMAZON NOVA</span>
-          {hasResult && (
-            <button onClick={reset} style={{ fontFamily:"var(--mono)", fontSize:11, color:"#555", background:"transparent", border:"1px solid #222", borderRadius:3, padding:"5px 12px", cursor:"pointer", letterSpacing:"0.1em" }}
-              onMouseEnter={(e)=>{e.target.style.borderColor="#444";e.target.style.color="#888";}}
-              onMouseLeave={(e)=>{e.target.style.borderColor="#222";e.target.style.color="#555";}}>
-              ← NEW ANALYSIS
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-3)", letterSpacing: "0.08em" }}>
+            Amazon Nova
+          </span>
+          {result && (
+            <button onClick={reset} style={{
+              fontFamily: "var(--sans)", fontSize: 12, fontWeight: 500,
+              color: "var(--text-2)", background: "var(--bg-3)",
+              border: "1px solid var(--border)", borderRadius: 6,
+              padding: "5px 14px", cursor: "pointer", transition: "all 0.15s",
+            }}
+              onMouseEnter={e => { e.target.style.borderColor = "var(--border-2)"; e.target.style.color = "var(--text)"; }}
+              onMouseLeave={e => { e.target.style.borderColor = "var(--border)"; e.target.style.color = "var(--text-2)"; }}
+            >
+              ← New Analysis
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* MAIN */}
-      <main style={{ paddingTop:52, height:"100vh", display:"flex", flexDirection:"column" }}>
+      <main style={{ paddingTop: 56, height: "100vh", display: "flex", flexDirection: "column" }}>
 
-        {/* STATE: NO RESULT */}
-        {!hasResult && (
-          <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 20px", animation:"fadeIn 0.5s ease both" }}>
-            <div style={{ width:"100%", maxWidth:720 }}>
+        {/* ── IDLE STATE ── */}
+        {!result && (
+          <div style={{
+            flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "0 24px",
+          }}>
+            <div style={{ width: "100%", maxWidth: 760, animation: "fadeUp 0.5s ease both" }}>
 
               {/* Hero */}
-              <div style={{ textAlign:"center", marginBottom:40 }}>
-                <div style={{ fontFamily:"var(--display)", fontWeight:800, fontSize:"clamp(48px,8vw,78px)", color:"var(--green)", textShadow:"var(--glow-green)", lineHeight:1, letterSpacing:"0.04em" }}>ADIA</div>
-                <div style={{ fontFamily:"var(--mono)", fontSize:11, color:"#2e2e2e", letterSpacing:"0.4em", marginTop:10 }}>AUTONOMOUS DECISION INTELLIGENCE AGENT</div>
-                <div style={{ fontFamily:"var(--mono)", fontSize:10, color:"#252525", letterSpacing:"0.3em", marginTop:6 }}>POWERED BY AMAZON NOVA</div>
+              <div style={{ marginBottom: 40 }}>
+                <div style={{
+                  fontFamily: "var(--display)", fontWeight: 800,
+                  fontSize: "clamp(36px,5vw,56px)",
+                  color: "var(--text)", letterSpacing: "-0.03em", lineHeight: 1.1,
+                  marginBottom: 12,
+                }}>
+                  Autonomous Decision{" "}
+                  <span style={{ color: "var(--green)" }}>Intelligence</span>
+                </div>
+                <div style={{ fontFamily: "var(--sans)", fontSize: 15, color: "var(--text-2)", lineHeight: 1.6, maxWidth: 540 }}>
+                  Adversarial AI agents debate investment decisions. Amazon Nova arbitrates a final verdict — GO, NO-GO, or CONDITIONAL.
+                </div>
               </div>
 
-              {/* Scenario buttons */}
-              <div style={{ display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap", marginBottom:28 }}>
-                {SCENARIOS.map((s) => (
-                  <ScenarioButton key={s.id} scenario={s} onClick={runEndpoint} disabled={loading} />
-                ))}
+              {/* Demo scenarios */}
+              <div style={{ marginBottom: 10 }}>
+                <div style={{
+                  fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-3)",
+                  letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 14,
+                }}>
+                  Run a demo scenario
+                </div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  {SCENARIOS.map(s => (
+                    <ScenarioCard key={s.id} s={s} onClick={(ep) => run(ep)} disabled={loading} />
+                  ))}
+                </div>
               </div>
 
               {/* Divider */}
-              <div style={{ height:1, background:"#111", margin:"0 0 24px" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0" }}>
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-3)", letterSpacing: "0.1em" }}>
+                  OR
+                </span>
+                <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+              </div>
 
               {/* Text input */}
-              <textarea
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Or paste a pitch deck / business description..."
-                rows={4}
-                style={{ width:"100%", background:"#060606", border:"1px solid #1e1e1e", borderRadius:4, padding:"12px 14px", color:"var(--text)", fontFamily:"var(--mono)", fontSize:13, lineHeight:1.7, resize:"vertical", transition:"border-color 0.15s" }}
-              />
-
-              {/* File + Analyze row */}
-              <div style={{ display:"flex", alignItems:"center", gap:12, marginTop:10, justifyContent:"space-between", flexWrap:"wrap" }}>
-                <label style={{ fontFamily:"var(--mono)", fontSize:11, color:"#333", cursor:"pointer", display:"flex", alignItems:"center", gap:8, border:"1px dashed #1e1e1e", borderRadius:3, padding:"6px 12px" }}
-                  onMouseEnter={(e)=>e.currentTarget.style.borderColor="#2e2e2e"}
-                  onMouseLeave={(e)=>e.currentTarget.style.borderColor="#1e1e1e"}>
-                  <input type="file" accept=".pdf" style={{ display:"none" }} onChange={(e) => setFile(e.target.files?.[0] || null)} />
-                  <span style={{ color:"#2a2a2a" }}>⊕</span>
-                  {file ? <span style={{ color:"#555" }}>{file.name}</span> : <span>ATTACH PDF</span>}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{
+                  fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-3)",
+                  letterSpacing: "0.1em", textTransform: "uppercase",
+                  display: "block", marginBottom: 10,
+                }}>
+                  Paste your pitch
                 </label>
-                <button onClick={handleAnalyzeText} disabled={loading || textInput.trim().length < 10}
-                  style={{ fontFamily:"var(--display)", fontWeight:600, fontSize:13, color:"var(--green)", background:"transparent", border:"1px solid var(--green)", borderRadius:3, padding:"8px 28px", cursor:textInput.trim().length>=10?"pointer":"not-allowed", letterSpacing:"0.05em", opacity:textInput.trim().length>=10?1:0.3, transition:"background 0.15s" }}
-                  onMouseEnter={(e)=>{if(textInput.trim().length>=10)e.target.style.background="rgba(0,255,157,0.06)";}}
-                  onMouseLeave={(e)=>{e.target.style.background="transparent";}}>
-                  ANALYZE →
+                <textarea
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder="Paste a pitch deck, business description, or investment memo..."
+                  rows={5}
+                  style={{
+                    width: "100%", background: "var(--bg-2)",
+                    border: "1px solid var(--border)", borderRadius: 8,
+                    padding: "12px 14px", color: "var(--text)",
+                    fontFamily: "var(--sans)", fontSize: 13.5, lineHeight: 1.65,
+                    resize: "vertical", transition: "border-color 0.15s, box-shadow 0.15s",
+                  }}
+                />
+              </div>
+
+              {/* Actions row */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                <label style={{
+                  display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+                  fontFamily: "var(--mono)", fontSize: 11, color: file ? "var(--blue)" : "var(--text-3)",
+                  background: "var(--bg-2)", border: "1px solid var(--border)",
+                  borderRadius: 6, padding: "7px 14px", transition: "all 0.15s",
+                }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border-2)"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
+                >
+                  <input type="file" accept=".pdf" style={{ display: "none" }}
+                    onChange={e => setFile(e.target.files?.[0] || null)} />
+                  <span style={{ fontSize: 13 }}>📎</span>
+                  {file ? file.name.slice(0, 24) + (file.name.length > 24 ? "…" : "") : "Attach PDF"}
+                </label>
+
+                <button
+                  onClick={() => text.trim().length >= 10 && run("", true, text.trim())}
+                  disabled={loading || text.trim().length < 10}
+                  style={{
+                    fontFamily: "var(--sans)", fontWeight: 600, fontSize: 13,
+                    color: text.trim().length >= 10 ? "#fff" : "var(--text-3)",
+                    background: text.trim().length >= 10 ? "var(--green-dim)" : "var(--bg-3)",
+                    border: `1px solid ${text.trim().length >= 10 ? "var(--green)" : "var(--border)"}`,
+                    borderRadius: 7, padding: "8px 24px",
+                    cursor: text.trim().length >= 10 ? "pointer" : "not-allowed",
+                    transition: "all 0.15s",
+                  }}
+                  onMouseEnter={e => { if (text.trim().length >= 10) e.target.style.background = "var(--green)"; e.target.style.color = "#000"; }}
+                  onMouseLeave={e => { if (text.trim().length >= 10) { e.target.style.background = "var(--green-dim)"; e.target.style.color = "#fff"; } }}
+                >
+                  Analyze →
                 </button>
               </div>
 
               {error && (
-                <div style={{ marginTop:16, fontFamily:"var(--mono)", fontSize:12, color:"var(--red)", border:"1px solid rgba(255,0,60,0.2)", borderRadius:3, padding:"10px 14px", background:"rgba(255,0,60,0.03)" }}>
-                  ▲ {error}
+                <div style={{
+                  marginTop: 16, fontFamily: "var(--sans)", fontSize: 13,
+                  color: "var(--red)", background: "var(--red-glow)",
+                  border: "1px solid var(--red)33", borderRadius: 7, padding: "10px 14px",
+                }}>
+                  {error}
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* STATE: RESULT */}
-        {hasResult && (
-          <div style={{ flex:1, display:"flex", overflow:"hidden", animation:"fadeIn 0.4s ease both" }}>
-            <div style={{ flex:"0 0 55%", position:"relative", borderRight:"1px solid #111", overflow:"hidden" }}>
+        {/* ── RESULT STATE ── */}
+        {result && (
+          <div style={{
+            flex: 1, display: "flex", overflow: "hidden",
+            animation: "fadeIn 0.35s ease both",
+          }}>
+            {/* Graph — left 55% */}
+            <div style={{
+              flex: "0 0 55%", overflow: "hidden",
+              borderRight: "1px solid var(--border)",
+              animation: "fadeIn 0.4s ease 0.1s both",
+            }}>
               <KnowledgeGraph result={result} />
             </div>
-            <div style={{ flex:"0 0 45%", overflow:"hidden" }}>
+
+            {/* Verdict — right 45% */}
+            <div style={{ flex: "0 0 45%", overflow: "hidden" }}>
               <VerdictPanel result={result} />
             </div>
           </div>
@@ -264,4 +324,3 @@ export default function HomePage() {
     </>
   );
 }
-
