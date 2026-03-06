@@ -235,7 +235,7 @@ export default function HomePage() {
                 }}>
                   Paste your pitch
                 </label>
-                <textarea
+                <textarea id="pitch-text"
                   value={text}
                   onChange={e => setText(e.target.value)}
                   placeholder="Paste a pitch deck, business description, or investment memo..."
@@ -261,7 +261,7 @@ export default function HomePage() {
                   onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border-2)"}
                   onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
                 >
-                  <input type="file" accept=".pdf" style={{ display: "none" }}
+                  <input id="pitch-file" type="file" accept=".pdf" style={{ display: "none" }}
                     onChange={e => setFile(e.target.files?.[0] || null)} />
                   <span style={{ fontSize: 13 }}>📎</span>
                   {file ? file.name.slice(0, 24) + (file.name.length > 24 ? "…" : "") : "Attach PDF"}
@@ -306,7 +306,7 @@ export default function HomePage() {
             animation: "fadeIn 0.35s ease both",
           }}>
             {/* Graph — left 55% */}
-            <div style={{
+            <div data-testid="knowledge-graph-pane" style={{
               flex: "0 0 55%", overflow: "hidden",
               borderRight: "1px solid var(--border)",
               animation: "fadeIn 0.4s ease 0.1s both",
@@ -315,7 +315,7 @@ export default function HomePage() {
             </div>
 
             {/* Verdict — right 45% */}
-            <div style={{ flex: "0 0 45%", overflow: "hidden" }}>
+            <div data-testid="verdict-panel-pane" style={{ flex: "0 0 45%", overflow: "hidden" }}>
               <VerdictPanel result={result} />
             </div>
           </div>
@@ -324,3 +324,4 @@ export default function HomePage() {
     </>
   );
 }
+
