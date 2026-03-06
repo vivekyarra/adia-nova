@@ -1,206 +1,113 @@
 import { useEffect, useState } from "react";
 
 const LINES = [
-  { text: "> Ingesting document corpus...", delay: 0, doneColor: "#444" },
-  { text: "> Extracting entities and risk signals...", delay: 1000, doneColor: "#444" },
-  { text: "> Blue Team mapping competitive moat...", delay: 2200, doneColor: "#00a8ff" },
-  { text: "> Red Team hunting fatal flaws...", delay: 3400, doneColor: "#ff003c" },
-  { text: "> Amazon Nova arbitrating verdict...", delay: 4600, doneColor: "#00ff9d" },
+  { text: "> Ingesting document corpus...", doneColor: "#444", delay: 0 },
+  { text: "> Extracting entities and risk signals...", doneColor: "#444", delay: 900 },
+  { text: "> Blue Team mapping competitive moat...", doneColor: "#00a8ff", delay: 2000 },
+  { text: "> Red Team hunting fatal flaws...", doneColor: "#ff003c", delay: 3200 },
+  { text: "> Amazon Nova arbitrating verdict...", doneColor: "#00ff9d", delay: 4500 },
 ];
 
+const CHAR_SPEED = 32;
+
 export default function TerminalLoader({ isVisible }) {
-  const [render, setRender] = useState(isVisible);
+  const [lineStates, setLineStates] = useState(LINES.map(() => ({ typed: "", done: false, active: false })));
+  const [mounted, setMounted] = useState(false);
   const [fadingOut, setFadingOut] = useState(false);
-  const [currentLineIndex, setCurrentLineIndex] = useState(0);
-  const [typedText, setTypedText] = useState("");
-  const [completed, setCompleted] = useState([]);
-  const [processingVisible, setProcessingVisible] = useState(true);
 
   useEffect(() => {
-    if (isVisible) {
-      setRender(true);
-      setFadingOut(false);
-      setCurrentLineIndex(0);
-      setTypedText("");
-      setCompleted([]);
-    } else if (render) {
-      setFadingOut(true);
-      const timeout = setTimeout(() => {
-        setRender(false);
-      }, 300);
-      return () => clearTimeout(timeout);
+    if (!isVisible) {
+      if (mounted) {
+        setFadingOut(true);
+        const t = setTimeout(() => { setMounted(false); setFadingOut(false); }, 300);
+        return () => clearTimeout(t);
+      }
+      return;
     }
-  }, [isVisible, render]);
 
-  useEffect(() => {
-    if (!render) return;
+    setMounted(true);
+    setFadingOut(false);
+    setLineStates(LINES.map(() => ({ typed: "", done: false, active: false })));
 
-    let typingTimeout;
-    let cursorInterval;
+    const timers = [];
 
-    const startLineTyping = (index) => {
-      if (index >= LINES.length) return;
-      const line = LINES[index];
-      setTypedText("");
+    LINES.forEach((line, lineIdx) => {
+      const startTimer = setTimeout(() => {
+        setLineStates((prev) => {
+          const next = [...prev];
+          next[lineIdx] = { ...next[lineIdx], active: true };
+          return next;
+        });
 
-      typingTimeout = setTimeout(() => {
-        let charIndex = 0;
+        let charIdx = 0;
         const full = line.text;
 
-        const typeNext = () => {
-          charIndex += 1;
-          setTypedText(full.slice(0, charIndex));
-          if (charIndex < full.length) {
-            typingTimeout = setTimeout(typeNext, 35);
-          } else {
-            setCompleted((prev) => [...prev, index]);
-            setCurrentLineIndex((prev) => Math.min(prev + 1, LINES.length - 1));
-            if (index + 1 < LINES.length) {
-              startLineTyping(index + 1);
+        const typeInterval = setInterval(() => {
+          charIdx++;
+          const partial = full.slice(0, charIdx);
+          setLineStates((prev) => {
+            const next = [...prev];
+            next[lineIdx] = { ...next[lineIdx], typed: partial };
+            return next;
+          });
+
+          if (charIdx >= full.length) {
+            clearInterval(typeInterval);
+            if (lineIdx < LINES.length - 1) {
+              setLineStates((prev) => {
+                const next = [...prev];
+                next[lineIdx] = { ...next[lineIdx], done: true, active: false };
+                return next;
+              });
             }
           }
-        };
+        }, CHAR_SPEED);
 
-        typeNext();
+        timers.push(typeInterval);
       }, line.delay);
-    };
 
-    startLineTyping(0);
+      timers.push(startTimer);
+    });
 
-    cursorInterval = setInterval(() => {
-      setProcessingVisible((v) => !v);
-    }, 800);
+    return () => timers.forEach((t) => { clearTimeout(t); clearInterval(t); });
+  }, [isVisible]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return () => {
-      clearTimeout(typingTimeout);
-      clearInterval(cursorInterval);
-    };
-  }, [render]);
-
-  if (!render) return null;
+  if (!mounted) return null;
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.96)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 9999,
-        opacity: fadingOut ? 0 : 1,
-        transition: "opacity 300ms ease-out",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 600,
-          width: "90%",
-          background: "#060606",
-          border: "1px solid #1a1a1a",
-          borderRadius: 4,
-          padding: 32,
-          boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
-          fontFamily: "var(--mono)",
-          fontSize: 12,
-          color: "#e8e8e8",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            marginBottom: 16,
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: "#ff003c",
-              }}
-            />
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: "#ffb800",
-              }}
-            />
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: "#00ff9d",
-              }}
-            />
-          </div>
-          <div
-            style={{
-              fontSize: 11,
-              letterSpacing: "0.18em",
-              color: "#444",
-              textTransform: "uppercase",
-            }}
-          >
-            ADIA INTELLIGENCE ENGINE
-          </div>
-          <div style={{ width: 40 }} />
+    <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(0,0,0,0.97)", display:"flex", alignItems:"center", justifyContent:"center", opacity:fadingOut?0:1, transition:"opacity 0.3s ease" }}>
+      <div style={{ width:"100%", maxWidth:580, background:"#050505", border:"1px solid #1e1e1e", borderRadius:6, overflow:"hidden", boxShadow:"0 0 60px rgba(0,255,157,0.05), 0 24px 48px rgba(0,0,0,0.8)" }}>
+
+        {/* Header */}
+        <div style={{ display:"flex", alignItems:"center", gap:6, padding:"10px 14px", borderBottom:"1px solid #1a1a1a", background:"#080808" }}>
+          <span style={{ width:10, height:10, borderRadius:"50%", background:"#ff5f57", display:"inline-block" }} />
+          <span style={{ width:10, height:10, borderRadius:"50%", background:"#febc2e", display:"inline-block" }} />
+          <span style={{ width:10, height:10, borderRadius:"50%", background:"#28c840", display:"inline-block" }} />
+          <span style={{ marginLeft:10, fontFamily:"var(--mono)", fontSize:11, color:"#3a3a3a", letterSpacing:"0.15em" }}>
+            ADIA INTELLIGENCE ENGINE — AMAZON NOVA
+          </span>
         </div>
 
-        <div
-          style={{
-            fontFamily: "var(--mono)",
-            lineHeight: 1.6,
-            minHeight: 140,
-          }}
-        >
-          {LINES.map((line, index) => {
-            const isCompleted = completed.includes(index);
-            const isActive = index === currentLineIndex && !isCompleted;
-
-            let content = null;
-            if (isActive) {
-              content = (
-                <>
-                  {typedText}
-                  <span
-                    style={{
-                      opacity: processingVisible ? 1 : 0,
-                    }}
-                  >
-                    _
-                  </span>
-                </>
-              );
-            } else if (isCompleted) {
-              const suffix = index === LINES.length - 1 ? "[PROCESSING...]" : "[DONE]";
-              content = (
-                <>
-                  {line.text}{" "}
-                  <span
-                    style={{
-                      color: line.doneColor,
-                      opacity: index === LINES.length - 1 ? (processingVisible ? 1 : 0.4) : 0.6,
-                    }}
-                  >
-                    {suffix}
-                  </span>
-                </>
-              );
-            } else {
-              content = " ";
-            }
+        {/* Body */}
+        <div style={{ padding:"22px 20px 24px", minHeight:200 }}>
+          {LINES.map((line, idx) => {
+            const state = lineStates[idx];
+            const isLastLine = idx === LINES.length - 1;
+            const hasStarted = state.typed.length > 0 || state.active;
+            if (!hasStarted) return null;
 
             return (
-              <div key={line.text} style={{ marginBottom: 6 }}>
-                {content}
+              <div key={idx} style={{ fontFamily:"var(--mono)", fontSize:13, lineHeight:"1.8", color:state.done ? state.doneColor : "#e8e8e8", display:"flex", alignItems:"center", gap:6 }}>
+                <span>{state.typed}</span>
+                {state.active && !state.done && (
+                  <span style={{ display:"inline-block", width:8, height:14, background:"#00ff9d", animation:"blink 0.8s step-start infinite", verticalAlign:"middle" }} />
+                )}
+                {state.done && !isLastLine && (
+                  <span style={{ color:state.doneColor, opacity:0.5, fontSize:11 }}>&nbsp;[DONE]</span>
+                )}
+                {isLastLine && state.typed.length >= line.text.length && (
+                  <span style={{ color:"#00ff9d", fontSize:11, animation:"blink 0.8s step-start infinite", letterSpacing:"0.1em" }}>&nbsp;[PROCESSING...]</span>
+                )}
               </div>
             );
           })}

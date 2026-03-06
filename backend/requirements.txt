@@ -4,5 +4,4 @@ boto3
 python-dotenv
 PyPDF2
 python-multipart
-faiss-cpu
 numpy

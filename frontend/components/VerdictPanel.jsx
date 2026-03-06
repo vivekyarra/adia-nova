@@ -1,265 +1,106 @@
 import { useEffect, useState } from "react";
-import { RadialBarChart, RadialBar } from "recharts";
+import { RadialBarChart, RadialBar, ResponsiveContainer } from "recharts";
 
 export default function VerdictPanel({ result }) {
-  const [mounted, setMounted] = useState(false);
-
+  const [visible, setVisible] = useState(false);
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    if (result) { const t = setTimeout(() => setVisible(true), 50); return () => clearTimeout(t); }
+    setVisible(false);
+  }, [result]);
 
   if (!result) return null;
 
-  const verdict = result.verdict || "CONDITIONAL";
-  const score = typeof result.conviction_score === "number" ? result.conviction_score : 0;
+  const { verdict, conviction_score, fatal_flaw, asymmetric_upside, executive_summary, key_risks, key_assets, recommended_action } = result;
 
-  let verdictColor = "var(--amber)";
-  let glow = "var(--glow-amber)";
-  if (verdict === "GO") {
-    verdictColor = "var(--green)";
-    glow = "var(--glow-green)";
-  } else if (verdict === "NO-GO") {
-    verdictColor = "var(--red)";
-    glow = "var(--glow-red)";
-  }
-
-  const gaugeData = [{ value: score }];
+  const verdictColor = verdict === "GO" ? "var(--green)" : verdict === "NO-GO" ? "var(--red)" : "var(--amber)";
+  const glowVar = verdict === "GO" ? "var(--glow-green)" : verdict === "NO-GO" ? "var(--glow-red)" : "var(--glow-amber)";
+  const pulseAnim = verdict === "GO" ? "pulseGreen 2s ease-in-out infinite" : verdict === "NO-GO" ? "pulseRed 2s ease-in-out infinite" : "none";
+  const gaugeData = [{ value: conviction_score ?? 0, fill: verdictColor }];
 
   return (
-    <div
-      style={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        gap: 24,
-        padding: 24,
-        background: "var(--panel)",
-        borderLeft: "1px solid var(--border)",
-        overflowY: "auto",
-      }}
-    >
-      <div
-        style={{
-          transform: mounted ? "scale(1)" : "scale(0.85)",
-          opacity: mounted ? 1 : 0,
-          transformOrigin: "top left",
-          transition: "all 400ms ease-out",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "var(--display)",
-            fontWeight: 800,
-            fontSize: 88,
-            lineHeight: 0.9,
-            color: verdictColor,
-            textShadow: glow,
-          }}
-        >
+    <div style={{ opacity:visible?1:0, transform:visible?"translateX(0)":"translateX(30px)", transition:"opacity 0.4s ease, transform 0.4s ease", height:"100%", overflowY:"auto", padding:"24px 20px 40px", display:"flex", flexDirection:"column", gap:20, borderLeft:"1px solid var(--border)" }}>
+
+      {/* VERDICT */}
+      <div style={{ textAlign:"center", paddingBottom:8 }}>
+        <div style={{ fontFamily:"var(--display)", fontWeight:800, fontSize:"clamp(64px,8vw,92px)", color:verdictColor, textShadow:glowVar, lineHeight:1, animation:pulseAnim, letterSpacing:"0.04em" }}>
           {verdict}
         </div>
-        <div
-          style={{
-            marginTop: 12,
-            fontSize: 10,
-            letterSpacing: "0.4em",
-            color: "#666",
-          }}
-        >
-          CONVICTION
-        </div>
-        <div
-          style={{
-            marginTop: 4,
-            fontFamily: "var(--mono)",
-            fontSize: 52,
-            color: verdictColor,
-          }}
-        >
-          {score}
+
+        {/* Gauge */}
+        <div style={{ position:"relative", width:160, height:160, margin:"12px auto 0" }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <RadialBarChart innerRadius="62%" outerRadius="86%" data={gaugeData} startAngle={90} endAngle={-270}>
+              <RadialBar dataKey="value" cornerRadius={4} background={{ fill:"#111" }} />
+            </RadialBarChart>
+          </ResponsiveContainer>
+          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", pointerEvents:"none" }}>
+            <span style={{ fontFamily:"var(--mono)", fontSize:32, fontWeight:500, color:verdictColor, lineHeight:1 }}>{conviction_score}</span>
+            <span style={{ fontFamily:"var(--mono)", fontSize:9, color:"var(--muted)", letterSpacing:"0.35em", marginTop:4 }}>CONVICTION</span>
+          </div>
         </div>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 24,
-          alignItems: "center",
-        }}
-      >
-        <RadialBarChart
-          width={160}
-          height={160}
-          innerRadius="65%"
-          outerRadius="85%"
-          startAngle={90}
-          endAngle={-270}
-          data={gaugeData}
-        >
-          <RadialBar
-            minAngle={5}
-            background
-            clockWise
-            dataKey="value"
-            cornerRadius={999}
-            fill={verdictColor}
-          />
-        </RadialBarChart>
-        <div
-          style={{
-            position: "absolute",
-            width: 160,
-            height: 160,
-            pointerEvents: "none",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: "var(--mono)",
-            fontSize: 36,
-            color: verdictColor,
-          }}
-        >
-          {score}
+      {/* FATAL FLAW */}
+      {fatal_flaw && (
+        <div style={{ borderLeft:"2px solid var(--red)", paddingLeft:14 }}>
+          <div style={{ fontFamily:"var(--mono)", fontSize:9, color:"var(--red)", letterSpacing:"0.35em", marginBottom:6, textTransform:"uppercase" }}>▲ FATAL FLAW</div>
+          <div style={{ fontSize:14, lineHeight:1.7, color:"var(--text)" }}>{fatal_flaw}</div>
         </div>
-      </div>
+      )}
 
-      <div style={{ display: "grid", gap: 18 }}>
-        <div
-          style={{
-            borderLeft: `2px solid var(--red)`,
-            paddingLeft: 12,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 10,
-              letterSpacing: "0.35em",
-              color: "var(--red)",
-              marginBottom: 6,
-            }}
-          >
-            ▲ FATAL FLAW
-          </div>
-          <div
-            style={{
-              fontSize: 15,
-              lineHeight: 1.6,
-              color: "var(--text)",
-            }}
-          >
-            {result.fatal_flaw}
-          </div>
+      {/* ASYMMETRIC UPSIDE */}
+      {asymmetric_upside && (
+        <div style={{ borderLeft:"2px solid var(--green)", paddingLeft:14 }}>
+          <div style={{ fontFamily:"var(--mono)", fontSize:9, color:"var(--green)", letterSpacing:"0.35em", marginBottom:6, textTransform:"uppercase" }}>◆ ASYMMETRIC UPSIDE</div>
+          <div style={{ fontSize:14, lineHeight:1.7, color:"var(--text)" }}>{asymmetric_upside}</div>
         </div>
+      )}
 
-        <div
-          style={{
-            borderLeft: `2px solid var(--green)`,
-            paddingLeft: 12,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 10,
-              letterSpacing: "0.35em",
-              color: "var(--green)",
-              marginBottom: 6,
-            }}
-          >
-            ◆ ASYMMETRIC UPSIDE
-          </div>
-          <div
-            style={{
-              fontSize: 15,
-              lineHeight: 1.6,
-              color: "var(--text)",
-            }}
-          >
-            {result.asymmetric_upside}
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gap: 10, marginTop: 4 }}>
-          <div
-            style={{
-              fontSize: 11,
-              letterSpacing: "0.25em",
-              color: "var(--red)",
-            }}
-          >
-            KEY RISKS
-          </div>
-          <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
-            {(result.key_risks || []).map((risk) => (
-              <div key={risk} style={{ color: "var(--text)" }}>
-                <span style={{ color: "var(--red)", marginRight: 6 }}>▸</span>
-                {risk}
+      {/* KEY RISKS */}
+      {key_risks?.length > 0 && (
+        <div>
+          <div style={{ fontFamily:"var(--mono)", fontSize:9, color:"var(--red)", letterSpacing:"0.35em", marginBottom:10, textTransform:"uppercase" }}>KEY RISKS</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {key_risks.map((r, i) => (
+              <div key={i} style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+                <span style={{ color:"var(--red)", fontSize:10, marginTop:3, flexShrink:0 }}>▸</span>
+                <span style={{ fontSize:13, lineHeight:1.6, color:"#bbb" }}>{r}</span>
               </div>
             ))}
           </div>
         </div>
+      )}
 
-        <div style={{ display: "grid", gap: 10, marginTop: 4 }}>
-          <div
-            style={{
-              fontSize: 11,
-              letterSpacing: "0.25em",
-              color: "var(--green)",
-            }}
-          >
-            KEY ASSETS
-          </div>
-          <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
-            {(result.key_assets || []).map((asset) => (
-              <div key={asset} style={{ color: "var(--text)" }}>
-                <span style={{ color: "var(--green)", marginRight: 6 }}>◆</span>
-                {asset}
+      {/* KEY ASSETS */}
+      {key_assets?.length > 0 && (
+        <div>
+          <div style={{ fontFamily:"var(--mono)", fontSize:9, color:"var(--green)", letterSpacing:"0.35em", marginBottom:10, textTransform:"uppercase" }}>KEY ASSETS</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {key_assets.map((a, i) => (
+              <div key={i} style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+                <span style={{ color:"var(--green)", fontSize:10, marginTop:3, flexShrink:0 }}>◆</span>
+                <span style={{ fontSize:13, lineHeight:1.6, color:"#bbb" }}>{a}</span>
               </div>
             ))}
           </div>
         </div>
+      )}
 
-        <div
-          style={{
-            marginTop: 8,
-            padding: 16,
-            background: "#0a0a0a",
-            border: "1px solid var(--amber)",
-            borderLeftWidth: 3,
-            borderLeftColor: "var(--amber)",
-            borderRadius: 6,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 10,
-              letterSpacing: "0.35em",
-              color: "var(--amber)",
-              marginBottom: 8,
-            }}
-          >
-            RECOMMENDED ACTION
-          </div>
-          <div
-            style={{
-              fontSize: 14,
-              color: "var(--text)",
-            }}
-          >
-            {result.recommended_action}
-          </div>
+      {/* RECOMMENDED ACTION */}
+      {recommended_action && (
+        <div style={{ background:"#0a0a0a", border:"1px solid var(--amber)", borderLeft:"3px solid var(--amber)", borderRadius:4, padding:"14px 16px" }}>
+          <div style={{ fontFamily:"var(--mono)", fontSize:9, color:"var(--amber)", letterSpacing:"0.35em", marginBottom:8, textTransform:"uppercase" }}>RECOMMENDED ACTION</div>
+          <div style={{ fontSize:13, lineHeight:1.7, color:"var(--text)" }}>{recommended_action}</div>
         </div>
+      )}
 
-        <div
-          style={{
-            marginTop: 4,
-            fontSize: 13,
-            lineHeight: 1.8,
-            color: "var(--muted)",
-          }}
-        >
-          {result.executive_summary}
+      {/* EXECUTIVE SUMMARY */}
+      {executive_summary && (
+        <div>
+          <div style={{ fontFamily:"var(--mono)", fontSize:9, color:"var(--muted-light)", letterSpacing:"0.35em", marginBottom:8, textTransform:"uppercase" }}>EXECUTIVE SUMMARY</div>
+          <div style={{ fontSize:12, lineHeight:1.9, color:"var(--muted-light)" }}>{executive_summary}</div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
