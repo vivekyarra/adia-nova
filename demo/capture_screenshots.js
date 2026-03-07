@@ -14,6 +14,7 @@ const SCREENSHOT_FILES = [
   "homepage.png",
   "problem-input.png",
   "document-upload.png",
+  "voice-coming-soon.png",
   "terminal-loader.png",
   "live-verdict.png",
   "knowledge-graph.png",
@@ -200,6 +201,10 @@ async function run() {
       { delay: 10 }
     );
     await page.screenshot({ path: path.join(SCREENSHOTS_DIR, "problem-input.png"), fullPage: true });
+
+    await clickScenario(page, "Voice");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await page.screenshot({ path: path.join(SCREENSHOTS_DIR, "voice-coming-soon.png"), fullPage: true });
 
     createSamplePdf(samplePdfPath);
     const fileInput = await page.$("#pitch-file");

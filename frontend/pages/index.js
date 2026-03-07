@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import TerminalLoader from "../components/TerminalLoader";
 import VerdictPanel from "../components/VerdictPanel";
 import KnowledgeGraph from "../components/KnowledgeGraph";
@@ -85,9 +85,7 @@ export default function HomePage() {
   const [streamingText, setStreamingText] = useState("");
   const [streamingAgents, setStreamingAgents] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
+  const [voiceNotice, setVoiceNotice] = useState("");
 
   // ── STREAMING FETCH ──
   const runStream = useCallback(async (textVal) => {
@@ -182,56 +180,11 @@ export default function HomePage() {
       setLoading(false);
     }
   }
-
-  // ── VOICE RECORDING ──
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        stream.getTracks().forEach(t => t.stop());
-
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result.split(",")[1];
-          try {
-            const res = await fetch(`${API_BASE}/transcribe`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ audio_b64: base64, mime_type: "audio/webm" }),
-            });
-            const data = await res.json();
-            if (data.transcript) {
-              setText(prev => prev ? prev + "\n" + data.transcript : data.transcript);
-            }
-          } catch {}
-        };
-        reader.readAsDataURL(blob);
-      };
-
-      mediaRecorder.start();
-      setRecording(true);
-    } catch {
-      setError("Microphone access denied.");
-    }
+  const showVoiceComingSoon = () => {
+    setVoiceNotice("Voice input coming soon \u2014 please type your pitch");
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && recording) {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-    }
-  };
-
-  const reset = () => { setResult(null); setError(""); setText(""); setFile(null); setFile2(null); setStreamingText(""); setStreamingAgents([]); };
+  const reset = () => { setResult(null); setError(""); setText(""); setFile(null); setFile2(null); setStreamingText(""); setStreamingAgents([]); setVoiceNotice(""); };
 
   return (
     <>
@@ -241,7 +194,6 @@ export default function HomePage() {
         @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
         @keyframes pulseGreen{0%,100%{box-shadow:0 0 0 0 rgba(63,185,80,0)}50%{box-shadow:0 0 20px 4px rgba(63,185,80,0.2)}}
         @keyframes pulseRed{0%,100%{box-shadow:0 0 0 0 rgba(248,81,73,0)}50%{box-shadow:0 0 20px 4px rgba(248,81,73,0.2)}}
-        @keyframes pulseRecord{0%,100%{box-shadow:0 0 0 0 rgba(248,81,73,0)}50%{box-shadow:0 0 12px 3px rgba(248,81,73,0.4)}}
         textarea:focus{outline:none;border-color:var(--blue)!important;box-shadow:0 0 0 3px var(--blue-glow)!important}
         button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
       `}</style>
@@ -362,6 +314,19 @@ export default function HomePage() {
                 />
               </div>
 
+              {voiceNotice && (
+                <div style={{
+                  marginBottom: 12, fontFamily: "var(--sans)", fontSize: 13,
+                  color: "var(--text-2)", background: "var(--bg-2)",
+                  border: "1px solid var(--border)", borderRadius: 7, padding: "10px 14px",
+                }}>
+                  <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--blue)", letterSpacing: "0.08em", textTransform: "uppercase", marginRight: 8 }}>
+                    Planned feature
+                  </span>
+                  {voiceNotice}
+                </div>
+              )}
+
               {/* Actions row */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -399,21 +364,20 @@ export default function HomePage() {
 
                   {/* Voice button */}
                   <button
-                    onClick={recording ? stopRecording : startRecording}
+                    onClick={showVoiceComingSoon}
                     disabled={loading}
                     style={{
                       display: "flex", alignItems: "center", gap: 6,
                       fontFamily: "var(--mono)", fontSize: 11,
-                      color: recording ? "var(--red)" : "var(--text-3)",
-                      background: recording ? "var(--red-glow)" : "var(--bg-2)",
-                      border: `1px solid ${recording ? "var(--red)33" : "var(--border)"}`,
+                      color: "var(--text-2)",
+                      background: "var(--bg-2)",
+                      border: "1px solid var(--border)",
                       borderRadius: 6, padding: "7px 14px", cursor: "pointer",
                       transition: "all 0.15s",
-                      animation: recording ? "pulseRecord 1.5s ease-in-out infinite" : "none",
                     }}
                   >
-                    <span style={{ fontSize: 13 }}>{recording ? "⏹" : "🎤"}</span>
-                    {recording ? "Stop" : "Voice"}
+                    <span style={{ fontSize: 13 }}>??</span>
+                    Voice
                   </button>
                 </div>
 
@@ -474,3 +438,5 @@ export default function HomePage() {
     </>
   );
 }
+
+

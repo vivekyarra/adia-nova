@@ -1,129 +1,103 @@
-# ADIA — Autonomous Decision Intelligence Agent
+# ADIA - Autonomous Decision Intelligence Agent
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python) ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?logo=fastapi) ![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js) ![AWS Bedrock](https://img.shields.io/badge/AWS-Bedrock-orange?logo=amazon-aws) ![Amazon Nova](https://img.shields.io/badge/Amazon-Nova_Lite-purple?logo=amazon-aws)
 
-> AI-powered investment decision intelligence built on **Amazon Nova** via AWS Bedrock.
-> ADIA runs a **4-agent pipeline** — Research → Analysis → Reasoning → Report — with **multimodal understanding**, **agentic tool use**, **streaming responses**, and **citation grounding**.
+ADIA is a decision intelligence app for hackathon demos and investor-style startup reviews. It uses Amazon Nova Lite through AWS Bedrock, a FastAPI backend, and a Next.js frontend to turn startup inputs into a structured verdict, live reasoning stream, and knowledge graph.
 
----
+## Overview
+
+Core experience:
+- Research and analysis are merged into one low-latency Nova call.
+- Reasoning and verdict generation are merged into one low-latency Nova call.
+- PDF uploads are parsed locally, relevant context is retrieved locally, and image evidence is passed to Nova when available.
+- If Bedrock is unavailable, ADIA returns a safe fallback payload so the UI never breaks.
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         USER INPUT                                  │
-│       Text Pitch  │  PDF Upload  │  Voice Audio  │  Dual Docs      │
-└────────┬──────────┴──────┬───────┴───────┬───────┴──────┬──────────┘
-         │                 │               │              │
-         ▼                 ▼               ▼              ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                     FastAPI Backend (Python)                         │
-│                                                                      │
-│  ┌──────────────┐  ┌──────────────────┐  ┌────────────────────────┐ │
-│  │ ResearchAgent │  │  AnalysisAgent   │  │    ReasoningAgent      │ │
-│  │              │  │  (Multimodal)    │  │  (Tool Use + Stream)   │ │
-│  │ Amazon Nova  │  │  Amazon Nova     │  │  Amazon Nova           │ │
-│  │ text gen     │  │  image+text      │  │  flag_fatal_flaw tool  │ │
-│  │              │  │  PDF→PNG→Nova    │  │  request_clarification │ │
-│  └──────┬───────┘  └───────┬──────────┘  └───────┬────────────────┘ │
-│         │                  │                     │                   │
-│         └──────────────────┴─────────────────────┘                   │
-│                            │                                         │
-│                   ┌────────▼─────────┐                               │
-│                   │   ReportAgent    │                               │
-│                   │  Citations +     │                               │
-│                   │  Fatal Flaws +   │                               │
-│                   │  FAISS Similar   │                               │
-│                   │  Cases           │                               │
-│                   └────────┬─────────┘                               │
-│                            │                                         │
-│         ┌──────────────────┴──────────────────────┐                  │
-│         │         SSE Streaming Response           │                  │
-│         │     converse_stream → token deltas       │                  │
-│         └──────────────────┬──────────────────────┘                  │
-└────────────────────────────┼─────────────────────────────────────────┘
-                             │
-                             ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                    Next.js Frontend                                  │
-│                                                                      │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌──────────────┐  │
-│  │Terminal Loader│ │ Verdict     │ │ Knowledge   │ │ Citations +  │  │
-│  │+ Live Stream │ │ Panel       │ │ Graph       │ │ Similar Cases│  │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └──────────────┘  │
-└──────────────────────────────────────────────────────────────────────┘
+```text
+User Input
+  |- Demo scenario
+  |- Typed pitch
+  |- Optional PDFs/images
+  v
+FastAPI Backend
+  |- Local document parsing
+  |- Local retrieval context
+  |- Nova call 1: research + analysis
+  |- Nova call 2: reasoning + verdict
+  |- SSE streaming response for live UI updates
+  v
+Next.js Dashboard
+  |- Terminal loader
+  |- Verdict panel
+  |- Knowledge graph
 ```
 
-## Amazon Nova Integration Deep Dive
+## Amazon Nova Integration
 
-| # | API Call | Model ID | Purpose | What Makes It Non-Trivial |
-|---|---------|----------|---------|--------------------------|
-| 1 | `converse` | `amazon.nova-lite-v1:0` | **ResearchAgent** — decompose pitch into key factors & assumptions | Structured JSON extraction with fallback parsing |
-| 2 | `converse` (multimodal) | `amazon.nova-lite-v1:0` | **AnalysisAgent** — extract evidence from PDF page images + text | PDF pages converted to PNG at 150 DPI and sent as raw image bytes alongside text — true **Amazon Nova multimodal understanding**, not just text parsing |
-| 3 | `converse` + `toolConfig` | `amazon.nova-lite-v1:0` | **ReasoningAgent** — fuse research + evidence with tool use | Uses **Amazon Nova tool use** with `flag_fatal_flaw` and `request_clarification` tools. Nova decides autonomously when to invoke tools — real agentic behavior |
-| 4 | `converse_stream` | `amazon.nova-lite-v1:0` | **Streaming Verdict** — real-time token delivery via SSE | **Amazon Nova streaming** via `converse_stream` piped to FastAPI `StreamingResponse` → frontend `ReadableStream`. Tokens appear live in the UI |
-| 5 | `converse` | `amazon.nova-lite-v1:0` | **Voice Transcription** — process audio input for hands-free pitch entry | **Amazon Nova** processes audio context descriptions for voice-to-analysis workflow |
-| 6 | `converse` + `toolConfig` | `amazon.nova-lite-v1:0` | **Agentic Loop** — multi-turn clarification with session memory | **Amazon Nova** calls `request_clarification` tool when info is missing, creating a genuine multi-turn agentic loop (max 3 iterations) |
-| 7 | FAISS + hash embeddings | Local | **Similar Cases** — find historical pitch matches | 5 seed pitches (Airbnb, Uber, WeWork, Theranos, Stripe) indexed in FAISS; each new pitch is compared for pattern matching |
+ADIA uses `amazon.nova-lite-v1:0` through the Bedrock Runtime client.
 
-> **Total Amazon Nova calls per analysis: 3** (budgeted). Every call leverages a different Amazon Nova capability — text generation, multimodal image understanding, tool use, or streaming.
+Current Nova flow:
+1. Call 1 extracts traction, revenue signal, team strength, market size, multimodal evidence, risks, and assets.
+2. Call 2 turns that analysis into a verdict with conviction score, fatal flaw, upside, and next action.
 
-## Key Capabilities
+Latency controls in the backend:
+- Prompts are aggressively shortened.
+- `maxTokens` is capped at `300`.
+- `temperature` is capped at `0.3`.
+- The pipeline uses only `2` Nova calls per analysis.
+- Calls are budgeted and tracked in the response metadata.
 
-- **🖼️ Multimodal PDF Processing** — PDF pages rendered to PNG via `pdf2image` and sent to **Amazon Nova** as actual image bytes. Charts, tables, and visual layouts are understood natively.
-- **🔧 Agentic Tool Use** — **Amazon Nova** autonomously invokes `flag_fatal_flaw` and `request_clarification` tools. This is real tool-calling, not prompt chaining.
-- **⚡ Streaming Responses** — Verdicts stream token-by-token via `converse_stream` + SSE. The UI shows Nova thinking in real-time.
-- **📝 Citation Grounding** — Every risk and opportunity cites its source: `[Page 2]`, `[uploaded document]`, or `[AI inference]`.
-- **🎤 Voice Input** — Record audio via browser microphone, transcribe, and analyze in one flow.
-- **🔄 Agentic Loop** — Nova can ask follow-up questions when information is missing, then update its verdict with new context (max 3 turns).
-- **📊 Similar Past Decisions** — FAISS-indexed historical pitches surface pattern matches (Airbnb ↔ your SaaS, Theranos ↔ your deep-tech).
+Note on latency mode:
+- The backend attempts Bedrock latency optimization first.
+- If `performanceConfig={"latency": "optimized"}` is not supported for the current model/region combination, ADIA retries automatically without it instead of failing the request.
 
-## Community Impact
+## Features
 
-ADIA was built for **student founders in emerging markets** who lack access to experienced venture investors. In regions where:
-
-- 🌍 Expert VC feedback costs $500+/hour
-- 📊 First-time founders don't know what questions to ask
-- 🏫 University accelerators serve hundreds but have limited mentor bandwidth
-
-**ADIA provides investor-grade due diligence for free**, powered by Amazon Nova. A student in Lagos, Hyderabad, or São Paulo can paste their pitch and receive structured, cited, adversarial analysis — the same rigor a Sand Hill Road partner would apply.
+- Demo scenarios for fast judge walkthroughs
+- Typed pitch analysis
+- Optional PDF and image-backed analysis
+- Streaming analysis progress in the UI
+- Structured verdict JSON with conviction score
+- Knowledge graph view of assets and risks
+- Safe fallback output when live Nova calls fail
+- Voice button kept in the UI as a planned feature with a clean coming-soon message
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Intelligence | **Amazon Nova Lite** via AWS Bedrock (`boto3`) |
-| Backend | FastAPI, Python, pdf2image, Pillow, PyPDF2, FAISS, numpy |
-| Frontend | Next.js 14 (Pages Router), React 18, Recharts |
-| Deployment | Vercel (frontend) + Render (backend) |
+- Intelligence Layer: Amazon Nova Lite via AWS Bedrock (`boto3`)
+- Backend: FastAPI, Python, `python-dotenv`, `PyPDF2`, `pdf2image`, `Pillow`, `FAISS`, `numpy`
+- Frontend: Next.js (Pages Router), React, Recharts
+- Browser Automation: `puppeteer-core` for screenshot capture
+- Deployment: Render (backend) and Vercel (frontend)
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Health check — reports all capabilities |
-| `POST` | `/demo/scenario_a` | AI SaaS demo (GO candidate) |
-| `POST` | `/demo/scenario_b` | Crypto risk demo (NO-GO candidate) |
-| `POST` | `/demo/scenario_c` | Hardware burn demo (CONDITIONAL) |
-| `POST` | `/analyze` | Analyze custom text |
-| `POST` | `/analyze-with-docs` | Analyze text + uploaded PDFs (multimodal) |
-| `POST` | `/analyze-stream` | Streaming analysis via SSE |
-| `POST` | `/transcribe` | Voice audio → text transcription |
-| `POST` | `/analyze-voice` | Voice → transcribe → full analysis |
-| `POST` | `/similar` | Find similar historical pitches |
-| `POST` | `/analyze-start` | Begin agentic loop (may request clarification) |
-| `POST` | `/analyze-continue` | Continue agentic loop with user's answer |
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | Health check and backend status |
+| `GET` | `/ping` | Fast keep-warm endpoint |
+| `POST` | `/demo/scenario_a` | AI SaaS demo scenario |
+| `POST` | `/demo/scenario_b` | Crypto risk demo scenario |
+| `POST` | `/demo/scenario_c` | Hardware burn demo scenario |
+| `POST` | `/analyze` | Analyze a typed pitch |
+| `POST` | `/analyze-with-docs` | Analyze a typed pitch with uploaded files |
+| `POST` | `/analyze-stream` | Stream analysis progress and final result |
 
 ## Local Setup
 
 ### Backend
 
 Create `backend/.env`:
+
 ```env
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=your-key
 AWS_SECRET_ACCESS_KEY=your-secret
+AWS_SESSION_TOKEN=
 ```
+
+Run:
 
 ```bash
 cd backend
@@ -131,14 +105,15 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-> **Multimodal PDF support** requires [Poppler](https://poppler.freedesktop.org/). Ubuntu: `apt install poppler-utils`. macOS: `brew install poppler`. If unavailable, falls back to text-only extraction.
-
 ### Frontend
 
 Create `frontend/.env.local`:
+
 ```env
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
+
+Run:
 
 ```bash
 cd frontend
@@ -146,12 +121,20 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
+Open `http://127.0.0.1:3000`.
+
+## Performance Notes
+
+Latest local checks after the latency refactor:
+- `/analyze`, `/analyze-with-docs`, `/demo/scenario_a`, and `/analyze-stream` all return `200`.
+- Direct orchestrator timing for a typed pitch is under `5` seconds locally with `2` Nova calls.
+- Startup warmup and `/ping` keep-warm logic are included in the backend.
 
 ## Screenshots
 
 ![Homepage](screenshots/homepage.png)
 ![Problem Input](screenshots/problem-input.png)
+![Voice Coming Soon](screenshots/voice-coming-soon.png)
 ![Document Upload](screenshots/document-upload.png)
 ![Terminal Loader](screenshots/terminal-loader.png)
 ![Live Verdict](screenshots/live-verdict.png)
@@ -160,8 +143,16 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
 ## Demo
 
-For the 3-minute timed judge walkthrough, see [demo/DEMO_SCRIPT.md](demo/DEMO_SCRIPT.md).
+For the judge walkthrough, see [demo/DEMO_SCRIPT.md](demo/DEMO_SCRIPT.md).
 
----
+## Run Commands
 
-**Built with Amazon Nova** for the AWS Hackathon.
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
+
+cd ../frontend
+npm install
+npm run dev
+```

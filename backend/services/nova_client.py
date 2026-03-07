@@ -157,6 +157,7 @@ class NovaClient:
             aws_secret_access_key=normalized_secret_key,
             aws_session_token=normalized_session_token,
         )
+        self._latency_optimized_supported: bool | None = None
 
     @staticmethod
     def _build_client(
@@ -181,6 +182,46 @@ class NovaClient:
         stripped = value.strip().strip('"').strip("'")
         return stripped or None
 
+    @staticmethod
+    def _is_latency_unsupported(exc: ClientError) -> bool:
+        code = exc.response.get("Error", {}).get("Code", "")
+        message = str(exc).lower()
+        return code == "ValidationException" and "latency performance configuration is not supported" in message
+
+    def _converse(self, **kwargs):
+        if self._latency_optimized_supported is False:
+            kwargs.pop("performanceConfig", None)
+            return self._client.converse(**kwargs)
+
+        try:
+            response = self._client.converse(**kwargs)
+        except ClientError as exc:
+            if self._is_latency_unsupported(exc):
+                self._latency_optimized_supported = False
+                kwargs.pop("performanceConfig", None)
+                return self._client.converse(**kwargs)
+            raise
+
+        self._latency_optimized_supported = True
+        return response
+
+    def _converse_stream(self, **kwargs):
+        if self._latency_optimized_supported is False:
+            kwargs.pop("performanceConfig", None)
+            return self._client.converse_stream(**kwargs)
+
+        try:
+            response = self._client.converse_stream(**kwargs)
+        except ClientError as exc:
+            if self._is_latency_unsupported(exc):
+                self._latency_optimized_supported = False
+                kwargs.pop("performanceConfig", None)
+                return self._client.converse_stream(**kwargs)
+            raise
+
+        self._latency_optimized_supported = True
+        return response
+
     # ─────────────────────────────────────────────
     # STANDARD TEXT / MULTIMODAL CALL
     # ─────────────────────────────────────────────
@@ -191,8 +232,8 @@ class NovaClient:
         budget: NovaCallBudget,
         system_prompt: str,
         images: Sequence[ImageInput] | None = None,
-        temperature: float = 0.2,
-        max_tokens: int = 700,
+        temperature: float = 0.3,
+        max_tokens: int = 300,
     ) -> str:
         """Send one prompt to Nova using the remaining call budget."""
         budget.consume()
@@ -210,7 +251,7 @@ class NovaClient:
                 )
 
         try:
-            response = self._client.converse(
+            response = self._converse(
                 modelId=self.model_id,
                 system=[{"text": system_prompt}],
                 messages=[{"role": "user", "content": user_content}],
@@ -219,6 +260,7 @@ class NovaClient:
                     "temperature": temperature,
                     "topP": 0.9,
                 },
+                performanceConfig={"latency": "optimized"},
             )
         except (NoCredentialsError, PartialCredentialsError) as exc:
             raise NovaAuthenticationError(
@@ -250,8 +292,8 @@ class NovaClient:
         budget: NovaCallBudget,
         system_prompt: str,
         tools: list[dict] | None = None,
-        temperature: float = 0.2,
-        max_tokens: int = 800,
+        temperature: float = 0.3,
+        max_tokens: int = 300,
     ) -> tuple[str, list[dict]]:
         """Send a prompt with tool definitions. Returns (text_response, tool_use_results).
 
@@ -263,7 +305,7 @@ class NovaClient:
             tools = [FATAL_FLAW_TOOL]
 
         try:
-            response = self._client.converse(
+            response = self._converse(
                 modelId=self.model_id,
                 system=[{"text": system_prompt}],
                 messages=[{"role": "user", "content": [{"text": prompt}]}],
@@ -272,6 +314,7 @@ class NovaClient:
                     "temperature": temperature,
                     "topP": 0.9,
                 },
+                performanceConfig={"latency": "optimized"},
                 toolConfig={"tools": tools},
             )
         except (NoCredentialsError, PartialCredentialsError) as exc:
@@ -317,12 +360,12 @@ class NovaClient:
         prompt: str,
         *,
         system_prompt: str,
-        temperature: float = 0.2,
-        max_tokens: int = 800,
+        temperature: float = 0.3,
+        max_tokens: int = 300,
     ) -> Generator[str, None, None]:
         """Stream text deltas from Nova using converse_stream. Yields text chunks."""
         try:
-            response = self._client.converse_stream(
+            response = self._converse_stream(
                 modelId=self.model_id,
                 system=[{"text": system_prompt}],
                 messages=[{"role": "user", "content": [{"text": prompt}]}],
@@ -331,6 +374,7 @@ class NovaClient:
                     "temperature": temperature,
                     "topP": 0.9,
                 },
+                performanceConfig={"latency": "optimized"},
             )
         except (NoCredentialsError, PartialCredentialsError) as exc:
             raise NovaAuthenticationError("AWS credentials are invalid or missing.") from exc
@@ -359,3 +403,5 @@ class NovaClient:
             if text:
                 text_chunks.append(text)
         return "\n".join(text_chunks).strip()
+
+
