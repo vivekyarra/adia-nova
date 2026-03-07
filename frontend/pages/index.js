@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import TerminalLoader from "../components/TerminalLoader";
 import VerdictPanel from "../components/VerdictPanel";
 import KnowledgeGraph from "../components/KnowledgeGraph";
@@ -81,23 +81,86 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
+  const [file2, setFile2] = useState(null);
+  const [streamingText, setStreamingText] = useState("");
+  const [streamingAgents, setStreamingAgents] = useState([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
+  // ── STREAMING FETCH ──
+  const runStream = useCallback(async (textVal) => {
+    setLoading(true); setResult(null); setError(""); setStreamingText(""); setStreamingAgents([]); setIsStreaming(true);
+    try {
+      const res = await fetch(`${API_BASE}/analyze-stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ problem: textVal, include_reasoning: true }),
+      });
+
+      if (!res.ok) {
+        const p = await res.json().catch(() => ({}));
+        throw new Error(p.error || p.detail || "Stream request failed.");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (payload === "[DONE]") continue;
+
+          try {
+            const event = JSON.parse(payload);
+            if (event.type === "agent") {
+              setStreamingAgents(prev => {
+                const existing = prev.find(a => a.agent === event.agent);
+                if (existing) {
+                  return prev.map(a => a.agent === event.agent ? { ...a, status: event.status } : a);
+                }
+                return [...prev, { agent: event.agent, status: event.status }];
+              });
+            } else if (event.type === "token") {
+              setStreamingText(prev => prev + event.text);
+            } else if (event.type === "result") {
+              setResult(event.data);
+            }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      setError("Streaming analysis failed. Please try again or use a demo scenario.");
+    } finally {
+      setLoading(false);
+      setIsStreaming(false);
+    }
+  }, []);
+
+  // ── STANDARD FETCH ──
   async function run(endpoint, isText = false, textVal = "") {
-    setLoading(true); setResult(null); setError("");
+    setLoading(true); setResult(null); setError(""); setStreamingText(""); setStreamingAgents([]);
     try {
       let fetchP;
-      if (isText && file) {
+      if (isText && (file || file2)) {
         const fd = new FormData();
         fd.append("problem", textVal);
         fd.append("include_reasoning", "true");
-        fd.append("files", file);
+        if (file) fd.append("files", file);
+        if (file2) fd.append("files", file2);
         fetchP = fetch(`${API_BASE}/analyze-with-docs`, { method: "POST", body: fd });
       } else if (isText) {
-        fetchP = fetch(`${API_BASE}/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ problem: textVal, include_reasoning: true }),
-        });
+        // Use streaming endpoint for text-only analysis
+        return runStream(textVal);
       } else {
         fetchP = fetch(`${API_BASE}${endpoint}`, { method: "POST" });
       }
@@ -120,7 +183,55 @@ export default function HomePage() {
     }
   }
 
-  const reset = () => { setResult(null); setError(""); setText(""); setFile(null); };
+  // ── VOICE RECORDING ──
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        stream.getTracks().forEach(t => t.stop());
+
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64 = reader.result.split(",")[1];
+          try {
+            const res = await fetch(`${API_BASE}/transcribe`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ audio_b64: base64, mime_type: "audio/webm" }),
+            });
+            const data = await res.json();
+            if (data.transcript) {
+              setText(prev => prev ? prev + "\n" + data.transcript : data.transcript);
+            }
+          } catch {}
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      mediaRecorder.start();
+      setRecording(true);
+    } catch {
+      setError("Microphone access denied.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+    }
+  };
+
+  const reset = () => { setResult(null); setError(""); setText(""); setFile(null); setFile2(null); setStreamingText(""); setStreamingAgents([]); };
 
   return (
     <>
@@ -130,11 +241,12 @@ export default function HomePage() {
         @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
         @keyframes pulseGreen{0%,100%{box-shadow:0 0 0 0 rgba(63,185,80,0)}50%{box-shadow:0 0 20px 4px rgba(63,185,80,0.2)}}
         @keyframes pulseRed{0%,100%{box-shadow:0 0 0 0 rgba(248,81,73,0)}50%{box-shadow:0 0 20px 4px rgba(248,81,73,0.2)}}
+        @keyframes pulseRecord{0%,100%{box-shadow:0 0 0 0 rgba(248,81,73,0)}50%{box-shadow:0 0 12px 3px rgba(248,81,73,0.4)}}
         textarea:focus{outline:none;border-color:var(--blue)!important;box-shadow:0 0 0 3px var(--blue-glow)!important}
         button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
       `}</style>
 
-      <TerminalLoader isVisible={loading} />
+      <TerminalLoader isVisible={loading} agents={streamingAgents} streamingText={streamingText} />
 
       {/* ── TOPBAR ── */}
       <header style={{
@@ -198,7 +310,7 @@ export default function HomePage() {
                   <span style={{ color: "var(--green)" }}>Intelligence</span>
                 </div>
                 <div style={{ fontFamily: "var(--sans)", fontSize: 15, color: "var(--text-2)", lineHeight: 1.6, maxWidth: 540 }}>
-                  Adversarial AI agents debate investment decisions. Amazon Nova arbitrates a final verdict — GO, NO-GO, or CONDITIONAL.
+                  4-agent AI pipeline: Research → Analysis → Reasoning → Report. Amazon Nova arbitrates with tool use, multimodal understanding, and streaming verdicts.
                 </div>
               </div>
 
@@ -252,20 +364,58 @@ export default function HomePage() {
 
               {/* Actions row */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-                <label style={{
-                  display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
-                  fontFamily: "var(--mono)", fontSize: 11, color: file ? "var(--blue)" : "var(--text-3)",
-                  background: "var(--bg-2)", border: "1px solid var(--border)",
-                  borderRadius: 6, padding: "7px 14px", transition: "all 0.15s",
-                }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border-2)"}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
-                >
-                  <input id="pitch-file" type="file" accept=".pdf" style={{ display: "none" }}
-                    onChange={e => setFile(e.target.files?.[0] || null)} />
-                  <span style={{ fontSize: 13 }}>📎</span>
-                  {file ? file.name.slice(0, 24) + (file.name.length > 24 ? "…" : "") : "Attach PDF"}
-                </label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  {/* Primary PDF upload */}
+                  <label style={{
+                    display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+                    fontFamily: "var(--mono)", fontSize: 11, color: file ? "var(--blue)" : "var(--text-3)",
+                    background: "var(--bg-2)", border: "1px solid var(--border)",
+                    borderRadius: 6, padding: "7px 14px", transition: "all 0.15s",
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border-2)"}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
+                  >
+                    <input id="pitch-file" type="file" accept=".pdf" style={{ display: "none" }}
+                      onChange={e => setFile(e.target.files?.[0] || null)} />
+                    <span style={{ fontSize: 13 }}>📎</span>
+                    {file ? file.name.slice(0, 20) + (file.name.length > 20 ? "…" : "") : "Pitch PDF"}
+                  </label>
+
+                  {/* Competitor PDF upload */}
+                  <label style={{
+                    display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+                    fontFamily: "var(--mono)", fontSize: 11, color: file2 ? "var(--amber)" : "var(--text-3)",
+                    background: "var(--bg-2)", border: `1px solid ${file2 ? "var(--amber)33" : "var(--border)"}`,
+                    borderRadius: 6, padding: "7px 14px", transition: "all 0.15s",
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border-2)"}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = file2 ? "var(--amber)33" : "var(--border)"}
+                  >
+                    <input type="file" accept=".pdf" style={{ display: "none" }}
+                      onChange={e => setFile2(e.target.files?.[0] || null)} />
+                    <span style={{ fontSize: 13 }}>📊</span>
+                    {file2 ? file2.name.slice(0, 16) + "…" : "Competitor (opt.)"}
+                  </label>
+
+                  {/* Voice button */}
+                  <button
+                    onClick={recording ? stopRecording : startRecording}
+                    disabled={loading}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6,
+                      fontFamily: "var(--mono)", fontSize: 11,
+                      color: recording ? "var(--red)" : "var(--text-3)",
+                      background: recording ? "var(--red-glow)" : "var(--bg-2)",
+                      border: `1px solid ${recording ? "var(--red)33" : "var(--border)"}`,
+                      borderRadius: 6, padding: "7px 14px", cursor: "pointer",
+                      transition: "all 0.15s",
+                      animation: recording ? "pulseRecord 1.5s ease-in-out infinite" : "none",
+                    }}
+                  >
+                    <span style={{ fontSize: 13 }}>{recording ? "⏹" : "🎤"}</span>
+                    {recording ? "Stop" : "Voice"}
+                  </button>
+                </div>
 
                 <button
                   onClick={() => text.trim().length >= 10 && run("", true, text.trim())}
@@ -279,8 +429,8 @@ export default function HomePage() {
                     cursor: text.trim().length >= 10 ? "pointer" : "not-allowed",
                     transition: "all 0.15s",
                   }}
-                  onMouseEnter={e => { if (text.trim().length >= 10) e.target.style.background = "var(--green)"; e.target.style.color = "#000"; }}
-                  onMouseLeave={e => { if (text.trim().length >= 10) { e.target.style.background = "var(--green-dim)"; e.target.style.color = "#fff"; } }}
+                  onMouseEnter={e => { if (text.trim().length >= 10) { e.target.style.background = "var(--green)"; e.target.style.color = "#000"; }}}
+                  onMouseLeave={e => { if (text.trim().length >= 10) { e.target.style.background = "var(--green-dim)"; e.target.style.color = "#fff"; }}}
                 >
                   Analyze →
                 </button>
@@ -324,4 +474,3 @@ export default function HomePage() {
     </>
   );
 }
-

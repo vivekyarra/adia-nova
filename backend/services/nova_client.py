@@ -2,14 +2,71 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Generator, Iterable, Sequence
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError, PartialCredentialsError
 
 
 MODEL_ID = "amazon.nova-lite-v1:0"
+
+# ─────────────────────────────────────────────
+# TOOL DEFINITIONS — Agentic tool use
+# ─────────────────────────────────────────────
+FATAL_FLAW_TOOL = {
+    "toolSpec": {
+        "name": "flag_fatal_flaw",
+        "description": "Flag a fatal flaw that would make this investment a NO-GO. Call this tool for each critical issue found.",
+        "inputSchema": {
+            "json": {
+                "type": "object",
+                "properties": {
+                    "flaw": {
+                        "type": "string",
+                        "description": "A concise description of the fatal flaw."
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": ["critical", "major", "minor"],
+                        "description": "How severe this flaw is."
+                    },
+                    "evidence": {
+                        "type": "string",
+                        "description": "The evidence or source that supports this flaw finding."
+                    }
+                },
+                "required": ["flaw", "severity", "evidence"]
+            }
+        }
+    }
+}
+
+REQUEST_CLARIFICATION_TOOL = {
+    "toolSpec": {
+        "name": "request_clarification",
+        "description": "Request clarification from the user when critical information is missing for a confident investment decision.",
+        "inputSchema": {
+            "json": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The specific question to ask the user."
+                    },
+                    "missing_field": {
+                        "type": "string",
+                        "description": "The category of missing information (e.g. 'revenue', 'team', 'market size')."
+                    }
+                },
+                "required": ["question", "missing_field"]
+            }
+        }
+    }
+}
+
+ALL_TOOLS = [FATAL_FLAW_TOOL, REQUEST_CLARIFICATION_TOOL]
 
 
 class NovaConfigurationError(RuntimeError):
@@ -124,6 +181,9 @@ class NovaClient:
         stripped = value.strip().strip('"').strip("'")
         return stripped or None
 
+    # ─────────────────────────────────────────────
+    # STANDARD TEXT / MULTIMODAL CALL
+    # ─────────────────────────────────────────────
     def ask_nova(
         self,
         prompt: str,
@@ -150,7 +210,6 @@ class NovaClient:
                 )
 
         try:
-            # Nova invocation point for both text and multimodal reasoning.
             response = self._client.converse(
                 modelId=self.model_id,
                 system=[{"text": system_prompt}],
@@ -180,6 +239,117 @@ class NovaClient:
             raise NovaInvocationError(f"Bedrock runtime error: {exc}") from exc
 
         return self._extract_text(response.get("output", {}).get("message", {}).get("content", []))
+
+    # ─────────────────────────────────────────────
+    # TOOL-USE CALL — Agentic behavior
+    # ─────────────────────────────────────────────
+    def ask_nova_with_tools(
+        self,
+        prompt: str,
+        *,
+        budget: NovaCallBudget,
+        system_prompt: str,
+        tools: list[dict] | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 800,
+    ) -> tuple[str, list[dict]]:
+        """Send a prompt with tool definitions. Returns (text_response, tool_use_results).
+
+        tool_use_results is a list of dicts from tool invocations (e.g. flag_fatal_flaw calls).
+        """
+        budget.consume()
+
+        if tools is None:
+            tools = [FATAL_FLAW_TOOL]
+
+        try:
+            response = self._client.converse(
+                modelId=self.model_id,
+                system=[{"text": system_prompt}],
+                messages=[{"role": "user", "content": [{"text": prompt}]}],
+                inferenceConfig={
+                    "maxTokens": max_tokens,
+                    "temperature": temperature,
+                    "topP": 0.9,
+                },
+                toolConfig={"tools": tools},
+            )
+        except (NoCredentialsError, PartialCredentialsError) as exc:
+            raise NovaAuthenticationError(
+                "AWS credentials are invalid or missing."
+            ) from exc
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code == "AccessDeniedException":
+                raise NovaAuthenticationError(
+                    "Bedrock access denied for tool use."
+                ) from exc
+            if code in {"UnrecognizedClientException", "InvalidSignatureException", "ExpiredTokenException"}:
+                raise NovaAuthenticationError(
+                    f"Bedrock authentication failed ({code})."
+                ) from exc
+            raise NovaInvocationError(f"Bedrock tool-use call failed ({code}): {exc}") from exc
+        except BotoCoreError as exc:
+            raise NovaInvocationError(f"Bedrock runtime error: {exc}") from exc
+
+        content = response.get("output", {}).get("message", {}).get("content", [])
+        text_parts: list[str] = []
+        tool_results: list[dict] = []
+
+        for item in content:
+            if "text" in item:
+                text_parts.append(item["text"])
+            elif "toolUse" in item:
+                tu = item["toolUse"]
+                tool_results.append({
+                    "tool_name": tu.get("name", ""),
+                    "tool_use_id": tu.get("toolUseId", ""),
+                    **tu.get("input", {}),
+                })
+
+        return "\n".join(text_parts).strip(), tool_results
+
+    # ─────────────────────────────────────────────
+    # STREAMING CALL — converse_stream
+    # ─────────────────────────────────────────────
+    def stream_nova(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str,
+        temperature: float = 0.2,
+        max_tokens: int = 800,
+    ) -> Generator[str, None, None]:
+        """Stream text deltas from Nova using converse_stream. Yields text chunks."""
+        try:
+            response = self._client.converse_stream(
+                modelId=self.model_id,
+                system=[{"text": system_prompt}],
+                messages=[{"role": "user", "content": [{"text": prompt}]}],
+                inferenceConfig={
+                    "maxTokens": max_tokens,
+                    "temperature": temperature,
+                    "topP": 0.9,
+                },
+            )
+        except (NoCredentialsError, PartialCredentialsError) as exc:
+            raise NovaAuthenticationError("AWS credentials are invalid or missing.") from exc
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            raise NovaInvocationError(f"Bedrock stream failed ({code}): {exc}") from exc
+        except BotoCoreError as exc:
+            raise NovaInvocationError(f"Bedrock runtime error: {exc}") from exc
+
+        stream = response.get("stream")
+        if stream is None:
+            return
+
+        for event in stream:
+            if "contentBlockDelta" in event:
+                delta = event["contentBlockDelta"].get("delta", {})
+                text = delta.get("text")
+                if text:
+                    yield text
 
     @staticmethod
     def _extract_text(content: Iterable[dict]) -> str:

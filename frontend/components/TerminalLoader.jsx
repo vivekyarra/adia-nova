@@ -1,28 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 
-const LINES = [
+const DEFAULT_LINES = [
   { text: "Ingesting document corpus", accent: "#8b949e", delay: 0 },
   { text: "Extracting entities and risk signals", accent: "#8b949e", delay: 900 },
-  { text: "Blue Team: mapping competitive moat", accent: "#58a6ff", delay: 2100 },
-  { text: "Red Team: hunting fatal flaws", accent: "#f85149", delay: 3300 },
-  { text: "Amazon Nova arbitrating verdict", accent: "#3fb950", delay: 4600 },
+  { text: "Research Agent: identifying key factors", accent: "#58a6ff", delay: 2100 },
+  { text: "Analysis Agent: extracting multimodal evidence", accent: "#d29922", delay: 3300 },
+  { text: "Reasoning Agent: tool use — flag_fatal_flaw", accent: "#f85149", delay: 4200 },
+  { text: "Amazon Nova streaming verdict", accent: "#3fb950", delay: 5200 },
 ];
 
-export default function TerminalLoader({ isVisible }) {
-  const [states, setStates] = useState(LINES.map(() => ({ typed: 0, done: false })));
+export default function TerminalLoader({ isVisible, agents = [], streamingText = "" }) {
+  const [states, setStates] = useState(DEFAULT_LINES.map(() => ({ typed: 0, done: false })));
   const [mounted, setMounted] = useState(false);
   const [opacity, setOpacity] = useState(0);
   const timersRef = useRef([]);
+  const streamRef = useRef(null);
 
   const clear = () => { timersRef.current.forEach(clearTimeout); timersRef.current = []; };
 
   useEffect(() => {
     if (isVisible) {
       setMounted(true);
-      setStates(LINES.map(() => ({ typed: 0, done: false })));
+      setStates(DEFAULT_LINES.map(() => ({ typed: 0, done: false })));
       setTimeout(() => setOpacity(1), 10);
 
-      LINES.forEach((line, li) => {
+      DEFAULT_LINES.forEach((line, li) => {
         const t = setTimeout(() => {
           let ch = 0;
           const iv = setInterval(() => {
@@ -46,6 +48,13 @@ export default function TerminalLoader({ isVisible }) {
     return clear;
   }, [isVisible]);
 
+  // Auto-scroll streaming text
+  useEffect(() => {
+    if (streamRef.current) {
+      streamRef.current.scrollTop = streamRef.current.scrollHeight;
+    }
+  }, [streamingText]);
+
   if (!mounted) return null;
 
   return (
@@ -57,7 +66,7 @@ export default function TerminalLoader({ isVisible }) {
       backdropFilter: "blur(4px)",
     }}>
       <div style={{
-        width: "100%", maxWidth: 520,
+        width: "100%", maxWidth: 580,
         background: "var(--bg-2)",
         border: "1px solid var(--border)",
         borderRadius: 10,
@@ -78,17 +87,17 @@ export default function TerminalLoader({ isVisible }) {
             marginLeft: 10, fontFamily: "var(--mono)", fontSize: 11,
             color: "var(--text-3)", letterSpacing: "0.08em",
           }}>
-            adia — intelligence pipeline
+            adia — 4-agent intelligence pipeline
           </span>
         </div>
 
         {/* Terminal body */}
-        <div style={{ padding: "20px 20px 24px", minHeight: 188 }}>
-          {LINES.map((line, li) => {
+        <div style={{ padding: "20px 20px 12px", minHeight: 188 }}>
+          {DEFAULT_LINES.map((line, li) => {
             const st = states[li];
             const started = st.typed > 0;
             if (!started) return null;
-            const isLast = li === LINES.length - 1;
+            const isLast = li === DEFAULT_LINES.length - 1;
             const text = line.text.slice(0, st.typed);
 
             return (
@@ -97,16 +106,13 @@ export default function TerminalLoader({ isVisible }) {
                 marginBottom: 10, fontFamily: "var(--mono)", fontSize: 12.5,
                 animation: "fadeUp 0.2s ease both",
               }}>
-                {/* Status dot */}
                 <div style={{
                   width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
                   background: st.done ? line.accent : "var(--border-2)",
                   boxShadow: st.done ? `0 0 6px ${line.accent}` : "none",
                   transition: "all 0.3s",
                 }} />
-
                 <span style={{ color: "var(--text-3)", userSelect: "none" }}>›</span>
-
                 <span style={{ color: st.done ? line.accent : "var(--text-2)", flex: 1 }}>
                   {text}
                   {!st.done && (
@@ -117,7 +123,6 @@ export default function TerminalLoader({ isVisible }) {
                     }} />
                   )}
                 </span>
-
                 {st.done && !isLast && (
                   <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-3)", letterSpacing: "0.05em" }}>done</span>
                 )}
@@ -131,7 +136,65 @@ export default function TerminalLoader({ isVisible }) {
               </div>
             );
           })}
+
+          {/* Live agent status from SSE */}
+          {agents.length > 0 && (
+            <div style={{ marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+              {agents.map((a, i) => (
+                <div key={i} style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  marginBottom: 6, fontFamily: "var(--mono)", fontSize: 11,
+                }}>
+                  <div style={{
+                    width: 5, height: 5, borderRadius: "50%",
+                    background: a.status === "done" ? "var(--green)" : a.status === "streaming" ? "var(--blue)" : "var(--amber)",
+                    boxShadow: a.status === "done" ? "0 0 4px var(--green)" : a.status === "streaming" ? "0 0 4px var(--blue)" : "none",
+                    animation: a.status === "streaming" ? "blink 1.2s ease-in-out infinite" : "none",
+                  }} />
+                  <span style={{ color: "var(--text-3)" }}>›</span>
+                  <span style={{
+                    color: a.status === "done" ? "var(--green)" : a.status === "streaming" ? "var(--blue)" : "var(--text-2)",
+                  }}>
+                    {a.agent}
+                  </span>
+                  <span style={{
+                    fontFamily: "var(--mono)", fontSize: 9, color: "var(--text-3)",
+                    letterSpacing: "0.05em",
+                  }}>
+                    {a.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Streaming text preview */}
+        {streamingText && (
+          <div
+            ref={streamRef}
+            style={{
+              borderTop: "1px solid var(--border)",
+              padding: "12px 20px 16px",
+              maxHeight: 140, overflowY: "auto",
+              fontFamily: "var(--mono)", fontSize: 10.5, lineHeight: 1.7,
+              color: "var(--text-3)", whiteSpace: "pre-wrap", wordBreak: "break-word",
+            }}
+          >
+            <div style={{
+              fontFamily: "var(--mono)", fontSize: 9, color: "var(--blue)",
+              letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6,
+            }}>
+              Nova Streaming Output
+            </div>
+            {streamingText.slice(-400)}
+            <span style={{
+              display: "inline-block", width: 2, height: 12,
+              background: "var(--green)", marginLeft: 1, verticalAlign: "middle",
+              animation: "blink 0.7s step-start infinite",
+            }} />
+          </div>
+        )}
       </div>
     </div>
   );

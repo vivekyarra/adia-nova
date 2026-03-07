@@ -11,14 +11,23 @@ export default function VerdictPanel({ result }) {
   if (!result) return null;
 
   const { verdict, conviction_score, fatal_flaw, asymmetric_upside,
-    executive_summary, key_risks, key_assets, recommended_action } = result;
+    executive_summary, key_risks, key_assets, recommended_action,
+    fatal_flaws, similar_cases, viability_score, confidence_score,
+    risks, opportunities, summary, recommended_strategy } = result;
+
+  // Support both legacy (key_risks) and new (risks) format
+  const displayRisks = key_risks || risks || [];
+  const displayAssets = key_assets || opportunities || [];
+  const displaySummary = executive_summary || summary || "";
+  const displayAction = recommended_action || recommended_strategy || "";
+  const displayScore = conviction_score ?? viability_score ?? 0;
 
   const isGo = verdict === "GO";
   const isNo = verdict === "NO-GO";
   const color = isGo ? "var(--green)" : isNo ? "var(--red)" : "var(--amber)";
   const glow = isGo ? "var(--green-glow)" : isNo ? "var(--red-glow)" : "var(--amber-glow)";
   const pulse = isGo ? "pulseGreen 2.5s ease-in-out infinite" : isNo ? "pulseRed 2.5s ease-in-out infinite" : "none";
-  const gaugeData = [{ value: conviction_score ?? 0, fill: color }];
+  const gaugeData = [{ value: displayScore, fill: color }];
 
   const Section = ({ label, color: c, children }) => (
     <div style={{ marginBottom: 20 }}>
@@ -30,6 +39,33 @@ export default function VerdictPanel({ result }) {
       {children}
     </div>
   );
+
+  const CitationBadge = ({ citation }) => {
+    if (!citation || citation === "model inference") {
+      return (
+        <span style={{
+          fontFamily: "var(--mono)", fontSize: 9, color: "var(--text-3)",
+          background: "var(--bg-4)", borderRadius: 3, padding: "1px 6px",
+          letterSpacing: "0.04em", marginLeft: 6, whiteSpace: "nowrap",
+        }}>
+          AI inference
+        </span>
+      );
+    }
+    return (
+      <span style={{
+        fontFamily: "var(--mono)", fontSize: 9, color: "var(--blue)",
+        background: "var(--blue-glow)", borderRadius: 3, padding: "1px 6px",
+        letterSpacing: "0.04em", marginLeft: 6, whiteSpace: "nowrap",
+        border: "1px solid rgba(88,166,255,0.2)",
+      }}>
+        {citation}
+      </span>
+    );
+  };
+
+  const getRiskText = (r) => typeof r === "string" ? r : (r?.text || r?.description || JSON.stringify(r));
+  const getRiskCitation = (r) => typeof r === "object" ? (r?.citation || r?.source || "model inference") : "model inference";
 
   return (
     <div style={{
@@ -71,7 +107,7 @@ export default function VerdictPanel({ result }) {
             pointerEvents: "none",
           }}>
             <span style={{ fontFamily: "var(--mono)", fontSize: 26, fontWeight: 500, color, lineHeight: 1 }}>
-              {conviction_score}
+              {displayScore}
             </span>
             <span style={{ fontFamily: "var(--mono)", fontSize: 8, color: "var(--text-3)", letterSpacing: "0.2em", marginTop: 3 }}>
               CONVICTION
@@ -80,8 +116,35 @@ export default function VerdictPanel({ result }) {
         </div>
       </div>
 
-      {/* ── FATAL FLAW ── */}
-      {fatal_flaw && (
+      {/* ── FATAL FLAWS (from tool use) ── */}
+      {fatal_flaws?.length > 0 && (
+        <Section label="⚠ Fatal Flaws Detected (via Tool Use)" color="var(--red)">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {fatal_flaws.map((ff, i) => (
+              <div key={i} style={{
+                background: "var(--red-glow)", border: "1px solid var(--red)22",
+                borderLeft: `3px solid ${ff.severity === "critical" ? "var(--red)" : ff.severity === "major" ? "var(--amber)" : "var(--text-3)"}`,
+                borderRadius: "0 8px 8px 0", padding: "12px 14px",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <span style={{
+                    fontFamily: "var(--mono)", fontSize: 9, fontWeight: 600,
+                    color: ff.severity === "critical" ? "var(--red)" : "var(--amber)",
+                    textTransform: "uppercase", letterSpacing: "0.1em",
+                    background: ff.severity === "critical" ? "rgba(248,81,73,0.15)" : "rgba(210,153,34,0.15)",
+                    padding: "1px 6px", borderRadius: 3,
+                  }}>{ff.severity}</span>
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text)", marginBottom: 4 }}>{ff.flaw}</div>
+                <div style={{ fontSize: 11, lineHeight: 1.5, color: "var(--text-3)", fontStyle: "italic" }}>Evidence: {ff.evidence}</div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* ── FATAL FLAW (legacy) ── */}
+      {fatal_flaw && !fatal_flaws?.length && (
         <div style={{
           background: "var(--red-glow)", border: "1px solid var(--red)22",
           borderLeft: "3px solid var(--red)", borderRadius: "0 8px 8px 0",
@@ -108,36 +171,79 @@ export default function VerdictPanel({ result }) {
         </div>
       )}
 
-      {/* ── RISKS ── */}
-      {key_risks?.length > 0 && (
+      {/* ── RISKS with citations ── */}
+      {displayRisks?.length > 0 && (
         <Section label="Key Risks" color="var(--red)">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {key_risks.map((r, i) => (
+            {displayRisks.map((r, i) => (
               <div key={i} style={{
                 display: "flex", gap: 10, alignItems: "flex-start",
                 background: "var(--bg-3)", border: "1px solid var(--border)",
                 borderRadius: 7, padding: "9px 12px",
               }}>
                 <span style={{ color: "var(--red)", fontSize: 11, marginTop: 1, flexShrink: 0 }}>✕</span>
-                <span style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)" }}>{r}</span>
+                <span style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)", flex: 1 }}>
+                  {getRiskText(r)}
+                </span>
+                <CitationBadge citation={getRiskCitation(r)} />
               </div>
             ))}
           </div>
         </Section>
       )}
 
-      {/* ── ASSETS ── */}
-      {key_assets?.length > 0 && (
+      {/* ── ASSETS with citations ── */}
+      {displayAssets?.length > 0 && (
         <Section label="Key Assets" color="var(--green)">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {key_assets.map((a, i) => (
+            {displayAssets.map((a, i) => (
               <div key={i} style={{
                 display: "flex", gap: 10, alignItems: "flex-start",
                 background: "var(--bg-3)", border: "1px solid var(--border)",
                 borderRadius: 7, padding: "9px 12px",
               }}>
                 <span style={{ color: "var(--green)", fontSize: 11, marginTop: 1, flexShrink: 0 }}>✓</span>
-                <span style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)" }}>{a}</span>
+                <span style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--text-2)", flex: 1 }}>
+                  {getRiskText(a)}
+                </span>
+                <CitationBadge citation={getRiskCitation(a)} />
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* ── SIMILAR HISTORICAL CASES ── */}
+      {similar_cases?.length > 0 && (
+        <Section label="Similar Past Decisions" color="var(--blue)">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {similar_cases.map((sc, i) => (
+              <div key={i} style={{
+                background: "var(--bg-3)", border: "1px solid var(--border)",
+                borderRadius: 8, padding: "12px 14px",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontFamily: "var(--display)", fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                    {sc.name}
+                  </span>
+                  <span style={{
+                    fontFamily: "var(--mono)", fontSize: 9, color: "var(--blue)",
+                    background: "var(--blue-glow)", borderRadius: 3, padding: "1px 6px",
+                    border: "1px solid rgba(88,166,255,0.2)",
+                  }}>
+                    {Math.round(sc.similarity_score * 100)}% match
+                  </span>
+                </div>
+                <div style={{
+                  fontFamily: "var(--mono)", fontSize: 10,
+                  color: sc.outcome.startsWith("GO") ? "var(--green)" : sc.outcome.startsWith("NO") ? "var(--red)" : "var(--amber)",
+                  marginBottom: 6,
+                }}>
+                  {sc.outcome}
+                </div>
+                <div style={{ fontSize: 11.5, lineHeight: 1.6, color: "var(--text-3)", fontStyle: "italic" }}>
+                  💡 {sc.lesson}
+                </div>
               </div>
             ))}
           </div>
@@ -145,7 +251,7 @@ export default function VerdictPanel({ result }) {
       )}
 
       {/* ── RECOMMENDED ACTION ── */}
-      {recommended_action && (
+      {displayAction && (
         <div style={{
           background: "var(--amber-glow)", border: "1px solid var(--amber)33",
           borderRadius: 8, padding: "14px 16px", marginBottom: 20,
@@ -153,15 +259,15 @@ export default function VerdictPanel({ result }) {
           <div style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--amber)", letterSpacing: "0.1em", marginBottom: 6 }}>
             → RECOMMENDED ACTION
           </div>
-          <div style={{ fontSize: 13, lineHeight: 1.65, color: "var(--text)" }}>{recommended_action}</div>
+          <div style={{ fontSize: 13, lineHeight: 1.65, color: "var(--text)" }}>{displayAction}</div>
         </div>
       )}
 
       {/* ── SUMMARY ── */}
-      {executive_summary && (
+      {displaySummary && (
         <Section label="Executive Summary" color="var(--text-3)">
           <div style={{ fontSize: 12.5, lineHeight: 1.85, color: "var(--text-2)" }}>
-            {executive_summary}
+            {displaySummary}
           </div>
         </Section>
       )}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass, field
 from io import BytesIO
 import re
@@ -11,6 +12,12 @@ try:
     import faiss
 except ImportError:  # pragma: no cover - fallback only when faiss is unavailable.
     faiss = None
+
+try:
+    from pdf2image import convert_from_bytes as _pdf2img_convert
+    _PDF2IMAGE_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _PDF2IMAGE_AVAILABLE = False
 
 import numpy as np
 from PyPDF2 import PdfReader
@@ -22,6 +29,7 @@ SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 SUPPORTED_PDF_EXTENSIONS = {".pdf"}
 MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
 MAX_FILES_PER_REQUEST = 8
+MAX_PDF_IMAGE_PAGES = 3  # Max pages to convert to images (controls cost)
 
 
 class InvalidUploadError(ValueError):
@@ -68,6 +76,36 @@ class ParsedInputs:
         return "\n".join(f"- {chunk}" for chunk in chunks)
 
 
+def extract_pdf_pages_as_images(pdf_bytes: bytes, max_pages: int = MAX_PDF_IMAGE_PAGES) -> list[ParsedImage]:
+    """Convert PDF pages to PNG images for multimodal Nova processing.
+
+    Uses pdf2image (requires Poppler) to render each page as a 150 DPI PNG.
+    Returns up to `max_pages` ParsedImage objects.
+    """
+    if not _PDF2IMAGE_AVAILABLE:
+        return []
+
+    try:
+        pil_images = _pdf2img_convert(pdf_bytes, dpi=150)
+    except Exception:
+        # pdf2image / poppler not working — caller should fall back to text
+        return []
+
+    result: list[ParsedImage] = []
+    for i, img in enumerate(pil_images[:max_pages]):
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        result.append(
+            ParsedImage(
+                name=f"pdf_page_{i + 1}.png",
+                image_format="png",
+                mime_type="image/png",
+                data=buf.getvalue(),
+            )
+        )
+    return result
+
+
 class DocumentParser:
     """Parses uploaded files, chunks text, and retrieves relevant snippets via FAISS."""
 
@@ -94,15 +132,29 @@ class DocumentParser:
                 continue
 
             if ext in SUPPORTED_PDF_EXTENSIONS:
+                # ── MULTIMODAL: convert PDF pages to PNG images for Nova ──
+                page_images = extract_pdf_pages_as_images(raw)
+                if page_images:
+                    for pi in page_images:
+                        parsed.images.append(pi)
+                        parsed.image_captions.append(
+                            f"Visual content from {name} — {pi.name}"
+                        )
+
+                # ── TEXT FALLBACK: also extract text for RAG / context ──
                 try:
                     text = self._extract_pdf_text(raw)
-                except InvalidUploadError as exc:
-                    parsed.invalid_files.append(name)
-                    raise exc
+                except InvalidUploadError:
+                    if not page_images:
+                        # No images AND no text — this PDF is unusable
+                        parsed.invalid_files.append(name)
+                        raise
+                    text = ""
+
                 if text.strip():
                     parsed.documents.append(ParsedDocument(name=name, text=text, source_type="pdf"))
                     all_chunks.extend(self._chunk_text(text))
-                else:
+                elif not page_images:
                     parsed.warnings.append(f"{name} has no machine-readable text.")
                 continue
 
