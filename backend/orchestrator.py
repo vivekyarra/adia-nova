@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 from typing import Sequence
 
 from fastapi import UploadFile
@@ -15,7 +16,11 @@ from services.nova_client import NovaCallBudget, NovaClient
 
 
 class ADIAOrchestrator:
-    """Coordinates agents and enforces a max of 3 Nova calls per request."""
+    """Coordinates agents and enforces a max of 3 Nova calls per request.
+
+    ResearchAgent and AnalysisAgent run in PARALLEL to cut latency ~50%.
+    ReasoningAgent and ReportAgent run sequentially after both finish.
+    """
 
     def __init__(self, nova_client: NovaClient) -> None:
         self.nova_client = nova_client
@@ -39,8 +44,18 @@ class ADIAOrchestrator:
                 "No valid files were uploaded. Accepted: PDF, TXT, MD, CSV, JSON, PNG, JPG, JPEG, WEBP."
             )
 
-        research_result = self.research_agent.run(problem=problem, budget=budget)
-        analysis_result = self.analysis_agent.run(problem=problem, parsed_inputs=parsed_inputs, budget=budget)
+        # ── PARALLEL: Research + Analysis run simultaneously ──
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            research_future = executor.submit(
+                self.research_agent.run, problem=problem, budget=budget
+            )
+            analysis_future = executor.submit(
+                self.analysis_agent.run, problem=problem, parsed_inputs=parsed_inputs, budget=budget
+            )
+            research_result = research_future.result()
+            analysis_result = analysis_future.result()
+
+        # ── SEQUENTIAL: Reasoning needs both results ──
         reasoning_result = self.reasoning_agent.run(
             problem=problem,
             research=research_result,

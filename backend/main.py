@@ -241,9 +241,14 @@ MAX_LOOP_ITERATIONS = 3
 # CORE ANALYSIS FUNCTION
 # ─────────────────────────────────────────────
 async def run_analysis(text: str) -> dict:
-    """Run adversarial agents then Nova arbitration."""
-    blue = BlueTeamAgent().analyze(text)
-    red = RedTeamAgent().analyze(text)
+    """Run adversarial agents in PARALLEL then Nova arbitration."""
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        blue_future = executor.submit(BlueTeamAgent().analyze, text)
+        red_future = executor.submit(RedTeamAgent().analyze, text)
+        blue = blue_future.result()
+        red = red_future.result()
 
     prompt = NOVA_PROMPT_TEMPLATE.format(
         blue_report=json.dumps(blue, indent=2),
@@ -510,13 +515,19 @@ async def analyze_stream(
     text = payload.problem
 
     async def generate():
-        # Phase 1: Run Blue/Red teams
-        yield f"data: {json.dumps({'type': 'agent', 'agent': 'BlueTeamAgent', 'status': 'analyzing'})}\n\n"
-        blue = BlueTeamAgent().analyze(text)
-        yield f"data: {json.dumps({'type': 'agent', 'agent': 'BlueTeamAgent', 'status': 'done'})}\n\n"
+        # Phase 1: Run Blue/Red teams IN PARALLEL
+        import concurrent.futures
 
+        yield f"data: {json.dumps({'type': 'agent', 'agent': 'BlueTeamAgent', 'status': 'analyzing'})}\n\n"
         yield f"data: {json.dumps({'type': 'agent', 'agent': 'RedTeamAgent', 'status': 'analyzing'})}\n\n"
-        red = RedTeamAgent().analyze(text)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            blue_future = executor.submit(BlueTeamAgent().analyze, text)
+            red_future = executor.submit(RedTeamAgent().analyze, text)
+            blue = blue_future.result()
+            red = red_future.result()
+
+        yield f"data: {json.dumps({'type': 'agent', 'agent': 'BlueTeamAgent', 'status': 'done'})}\n\n"
         yield f"data: {json.dumps({'type': 'agent', 'agent': 'RedTeamAgent', 'status': 'done'})}\n\n"
 
         # Phase 2: Stream Nova arbitration
