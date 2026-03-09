@@ -8,7 +8,7 @@
 
 > **Investor-grade pitch analysis for student founders — powered by Amazon Nova multimodal AI on AWS Bedrock.**
 
-**[🚀 Live Demo](https://adia-nova.vercel.app)** · **[📹 Demo Video](#)** · **[📝 Blog Post](https://builder.aws.com/content/3AUn7X85k2hvfZuDQf24s4K8UOv/how-i-built-a-multimodal-ai-investment-analyst-for-student-founders-using-amazon-nova)**
+**[🚀 Live Demo](https://adia-nova.vercel.app)** · **[📹 Demo Video](https://youtu.be/UYmPCPeUpcg?si=nFSTw3sdVkKYTawR)** · **[📝 Blog Post](https://builder.aws.com/content/3AUn7X85k2hvfZuDQf24s4K8UOv/how-i-built-a-multimodal-ai-investment-analyst-for-student-founders-using-amazon-nova)**
 
 ---
 
